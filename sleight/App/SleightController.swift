@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import Combine
 
 /// Owns capture + pipeline + synth; pushes settings changes into the engine.
 @MainActor
@@ -10,12 +11,18 @@ final class SleightController: ObservableObject {
     private(set) var pipeline: Pipeline!
     private let synth = TestSynth()
     private var started = false
+    private var cancellables = Set<AnyCancellable>()
 
     init() {
         pipeline = Pipeline(model: model)
         capture.onFrame = { [weak self] pb in
             self?.pipeline.process(pixelBuffer: pb)
         }
+        // Re-publish settings changes so views observing the controller (the
+        // practice toggle in the toolbar) re-render when AppSettings changes.
+        settings.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
         applySettings()
         // Route instrument events to the test synth via a lightweight tap:
         // Pipeline sends MIDI itself; the synth listens to the same events by

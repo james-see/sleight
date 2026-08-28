@@ -3,9 +3,13 @@ import SwiftUI
 /// AR overlay: skeleton, instrument zones, pinch ring, level meter, note readout.
 /// Drawn in normalized coordinates over the camera preview.
 struct OverlayView: View {
-    let overlay: OverlayState
+    @ObservedObject var model: PipelineModel
     let pitchBand: ClosedRange<Double>
     let volumeBand: ClosedRange<Double>
+
+    /// The model is observed, so this view re-renders on every pipeline
+    /// publish and the Canvas redraws; body code keeps reading `overlay`.
+    private var overlay: OverlayState { model.overlay }
 
     /// Hermes blue.
     static let accent = Color(red: 0x0A / 255, green: 0x84 / 255, blue: 0xFF / 255)

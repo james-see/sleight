@@ -3,8 +3,22 @@ import XCTest
 
 final class PipelineTests: XCTestCase {
     func testDropPolicy() {
-        XCTAssertFalse(DropPolicy.shouldProcess(lastDuration: 0.040, budget: 0.033))
-        XCTAssertTrue(DropPolicy.shouldProcess(lastDuration: 0.020, budget: 0.033))
+        XCTAssertFalse(DropPolicy.shouldProcess(lastDuration: 0.040, budget: 0.033, justDropped: false))
+        XCTAssertTrue(DropPolicy.shouldProcess(lastDuration: 0.020, budget: 0.033, justDropped: false))
+    }
+
+    /// Regression: one over-budget frame (Vision warmup) used to wedge the
+    /// pipeline permanently — lastDuration only updated on processed frames,
+    /// so every later frame was dropped forever and hands never registered.
+    /// The frame right after a drop must always process.
+    func testDropPolicyRecoversAfterDrop() {
+        // warmup frame overran the budget → dropped, justDropped latched
+        XCTAssertFalse(DropPolicy.shouldProcess(lastDuration: 0.200, budget: 0.033, justDropped: false))
+        // next frame processes even though lastDuration still reads slow
+        XCTAssertTrue(DropPolicy.shouldProcess(lastDuration: 0.200, budget: 0.033, justDropped: true))
+        // sustained overload degrades to half rate, never a wedge
+        XCTAssertFalse(DropPolicy.shouldProcess(lastDuration: 0.200, budget: 0.033, justDropped: false))
+        XCTAssertTrue(DropPolicy.shouldProcess(lastDuration: 0.200, budget: 0.033, justDropped: true))
     }
 
     @MainActor

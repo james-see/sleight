@@ -11,7 +11,7 @@ struct ContentView: View {
             ZStack {
                 CameraPreview(session: controller.captureSession)
                     .ignoresSafeArea(edges: .bottom)
-                OverlayView(overlay: controller.model.overlay,
+                OverlayView(model: controller.model,
                             pitchBand: controller.pipeline.instrument.pitchBand,
                             volumeBand: controller.pipeline.instrument.volumeBand)
                     .ignoresSafeArea(edges: .bottom)
@@ -30,12 +30,8 @@ struct ContentView: View {
 
     private var toolbar: some View {
         HStack(spacing: 16) {
-            Picker("Instrument", selection: .constant(0)) {
-                Text(Theremin().displayName).tag(0)
-            }
-            .pickerStyle(.menu)
-            .frame(width: 150)
-            .disabled(true) // v1: theremin only
+            Label(controller.pipeline.instrument.displayName, systemImage: "waveform")
+                .frame(width: 150)
 
             Toggle("Practice (silent)", isOn: Binding(
                 get: { controller.settings.practice },

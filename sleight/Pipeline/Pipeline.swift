@@ -19,9 +19,11 @@ struct OverlayState {
 
 enum DropPolicy {
     /// Stale frames are useless for a real-time instrument — skip if the last
-    /// frame overran its budget.
-    static func shouldProcess(lastDuration: Double, budget: Double) -> Bool {
-        lastDuration <= budget
+    /// frame overran its budget. Self-recovering: the frame right after a drop
+    /// is always processed, so one slow frame costs one drop (never a wedge)
+    /// and sustained overload degrades to half rate instead of freezing.
+    static func shouldProcess(lastDuration: Double, budget: Double, justDropped: Bool) -> Bool {
+        justDropped || lastDuration <= budget
     }
 }
 
@@ -57,6 +59,7 @@ final class Pipeline {
     private var fpsWindowStart = DispatchTime.now()
     private var lastFps: Double = 0
     private var droppedFrames = 0
+    private var justDropped = false
 
     init(model: PipelineModel, tracker: HandTracker = VisionHandTracker(), instrument: Theremin = Theremin()) {
         self.model = model
@@ -68,10 +71,12 @@ final class Pipeline {
     /// Entry point from CaptureService (capture queue context).
     func process(pixelBuffer: CVPixelBuffer) {
         let start = DispatchTime.now()
-        guard DropPolicy.shouldProcess(lastDuration: lastDuration, budget: frameBudget) else {
+        guard DropPolicy.shouldProcess(lastDuration: lastDuration, budget: frameBudget, justDropped: justDropped) else {
             droppedFrames += 1
+            justDropped = true
             return
         }
+        justDropped = false
 
         let t = Double(start.uptimeNanoseconds) / 1e9
         let dt = lastDuration == 0 ? 1.0 / 60 : lastDuration
