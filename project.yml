@@ -17,6 +17,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: us.jamescampbell.sleight
         ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_ENTITLEMENTS: sleight/Support/sleight.entitlements
         INFOPLIST_KEY_NSCameraUsageDescription: "Sleight tracks your hands to play MIDI instruments."
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
