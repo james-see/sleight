@@ -31,4 +31,15 @@ final class HandTrackerTests: XCTestCase {
         // next good point (index 1) still lands correctly
         XCTAssertEqual(frame.points[1].x, 1.0 - 1.0/21.0, accuracy: 1e-9)
     }
+
+    /// Vision normalized coords are bottom-left origin; published frames must
+    /// be top-down (SwiftUI Canvas + volume band both assume it). A raw y of
+    /// 0.25 (low in Vision space) must publish as 0.75 (low on screen).
+    func testMakeFrameFlipsYFromVisionBottomLeftOrigin() {
+        var f = fixture()
+        for i in 0..<21 { f[i]?.y = 0.25 }
+        let frame = VisionHandTracker.makeFrame(side: .right, points: f, timestamp: 1.0)
+        XCTAssertEqual(frame.points[0].y, 0.75, accuracy: 1e-9)
+        XCTAssertEqual(frame.points[10].y, 0.75, accuracy: 1e-9)
+    }
 }

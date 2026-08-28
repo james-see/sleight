@@ -63,14 +63,16 @@ public final class VisionHandTracker: HandTracker {
         return nil
     }
 
-    /// Pure + fixture-testable: mirror X for selfie view, gate confidence,
-    /// bridge weak/missing points to the previous good landmark.
+    /// Pure + fixture-testable: mirror X + flip Y for selfie top-down view
+    /// (Vision normalized coords are bottom-left origin — raw y would draw the
+    /// skeleton vertically flipped and invert the volume band), gate
+    /// confidence, bridge weak/missing points to the previous good landmark.
     static func makeFrame(side: HandSide, points: [Int: (x: Double, y: Double, c: Double)], timestamp: Double) -> HandFrame {
         var out: [LandmarkPoint] = []
         out.reserveCapacity(HandFrame.landmarkCount)
         for i in 0..<HandFrame.landmarkCount {
             if let p = points[i], p.c >= 0.5 {
-                out.append(LandmarkPoint(x: 1 - p.x, y: p.y, confidence: p.c))
+                out.append(LandmarkPoint(x: 1 - p.x, y: 1 - p.y, confidence: p.c))
             } else {
                 let fallback = out.last ?? LandmarkPoint(x: 0.5, y: 0.5, confidence: 0)
                 out.append(LandmarkPoint(x: fallback.x, y: fallback.y, confidence: 0))
