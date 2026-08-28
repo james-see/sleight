@@ -30,9 +30,14 @@ public final class VisionHandTracker: HandTracker {
         // front-camera orientation) made Vision analyze a rotated image and
         // detect nothing.
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
-        try? handler.perform([request])
-        guard let observations = request.results else { return [] }
-        return observations.compactMap { (obs: VNHumanHandPoseObservation) -> HandFrame? in
+        do {
+            try handler.perform([request])
+        } catch {
+            DebugProbe.shared.noteDetection(obs: 0, hands: 0, err: "\(error)")
+            return []
+        }
+        let observations = request.results ?? []
+        let frames = observations.compactMap { (obs: VNHumanHandPoseObservation) -> HandFrame? in
             guard let all = try? obs.recognizedPoints(.all) else { return nil }
             var pts: [Int: (x: Double, y: Double, c: Double)] = [:]
             for (joint, point) in all {
@@ -43,6 +48,8 @@ public final class VisionHandTracker: HandTracker {
             guard let wristX = pts[Landmark.wrist]?.x, let side = Self.assignSide(wristX: wristX) else { return nil }
             return Self.makeFrame(side: side, points: pts, timestamp: t)
         }
+        DebugProbe.shared.noteDetection(obs: observations.count, hands: frames.count, err: "none")
+        return frames
     }
 
     /// No handedness in Vision hand pose — assign by image side. Raw (.up)

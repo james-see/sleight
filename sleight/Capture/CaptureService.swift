@@ -56,6 +56,7 @@ final class CaptureService: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         cam.activeVideoMinFrameDuration = duration
         cam.activeVideoMaxFrameDuration = duration
         cam.unlockForConfiguration()
+        DebugProbe.shared.setDevice(cam.localizedName)
 
         session.beginConfiguration()
         session.sessionPreset = .high
@@ -78,6 +79,9 @@ final class CaptureService: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pb = sampleBuffer.imageBuffer else { return }
+        DebugProbe.shared.noteFrame(width: CVPixelBufferGetWidth(pb),
+                                    height: CVPixelBufferGetHeight(pb),
+                                    pixelFormat: CVPixelBufferGetPixelFormatType(pb))
         onFrame?(pb)
     }
 

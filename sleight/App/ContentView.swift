@@ -18,19 +18,7 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay {
-                if !controller.model.overlay.trackingActive {
-                    VStack(spacing: 6) {
-                        Text("Raise a hand")
-                            .font(.title2.bold())
-                            .foregroundStyle(.white)
-                        Text("right hand = pitch · left hand = volume · pinch = note")
-                            .font(.callout)
-                            .foregroundStyle(.white.opacity(0.7))
-                    }
-                    .padding(24)
-                    .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
-                    .allowsHitTesting(false)
-                }
+                TrackingCard(model: controller.model, controller: controller)
             }
             toolbar
         }
@@ -69,6 +57,33 @@ struct ContentView: View {
         }
         .padding(12)
         .background(.bar)
+    }
+}
+
+/// "Raise a hand" card. Observes the model directly so it disappears the
+/// moment tracking starts (ContentView itself doesn't subscribe to the model)
+/// and the diagnostic line stays live at frame rate while it's visible.
+private struct TrackingCard: View {
+    @ObservedObject var model: PipelineModel
+    let controller: SleightController
+
+    var body: some View {
+        if !model.overlay.trackingActive {
+            VStack(spacing: 6) {
+                Text("Raise a hand")
+                    .font(.title2.bold())
+                    .foregroundStyle(.white)
+                Text("right hand = pitch · left hand = volume · pinch = note")
+                    .font(.callout)
+                    .foregroundStyle(.white.opacity(0.7))
+                Text(controller.diagnostic)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            .padding(24)
+            .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+            .allowsHitTesting(false)
+        }
     }
 }
 

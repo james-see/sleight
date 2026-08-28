@@ -50,4 +50,18 @@ final class SleightController: ObservableObject {
     }
 
     var captureSession: AVCaptureSession { capture.captureSession }
+
+    /// One-line pipeline health readout shown in the "Raise a hand" card.
+    var diagnostic: String {
+        let p = DebugProbe.shared
+        let perm: String
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized: perm = "ok"
+        case .notDetermined: perm = "notDetermined"
+        case .denied: perm = "DENIED"
+        case .restricted: perm = "RESTRICTED"
+        @unknown default: perm = "?"
+        }
+        return "cam: \(p.device) | \(p.frame) | frames: \(p.frames) | vision: \(p.obs) obs → \(p.hands) hands | err: \(p.err) | perm: \(perm)"
+    }
 }
