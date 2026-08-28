@@ -21,6 +21,7 @@ public final class Theremin: Instrument {
     public private(set) var isGateOpen = false
     public private(set) var currentNote: UInt8?
     public private(set) var lastVolume: UInt8 = 0
+    public private(set) var lastPinchAmount: Double = 1.0
     private var pinch = PinchDetector()
     private var vibrato = VibratoEngine()
     private var vibratoDepthCents: Double = 0
@@ -69,7 +70,9 @@ public final class Theremin: Instrument {
         // ---- gate (right-hand pinch with hysteresis) ----
         var pinchActive = false
         if let r = right {
-            pinchActive = pinch.update(r).isActive
+            let p = pinch.update(r)
+            pinchActive = p.isActive
+            lastPinchAmount = p.amount
         }
 
         let baseNote = UInt8(currentPitch.rounded())
