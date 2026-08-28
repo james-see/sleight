@@ -155,7 +155,7 @@ final class Pipeline {
             fps: fps,
             droppedFrames: droppedFrames,
             trackingActive: !hands.isEmpty,
-            vibratoActive: false
+            vibratoActive: inst.vibratoActive
         )
         if synchronous {
             MainActor.assumeIsolated {

@@ -26,7 +26,10 @@ public final class VisionHandTracker: HandTracker {
     }
 
     public func detect(_ pixelBuffer: CVPixelBuffer, at t: Double) -> [HandFrame] {
-        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .leftMirrored)
+        // macOS camera buffers are already upright — .leftMirrored (an iOS
+        // front-camera orientation) made Vision analyze a rotated image and
+        // detect nothing.
+        let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         try? handler.perform([request])
         guard let observations = request.results else { return [] }
         return observations.compactMap { (obs: VNHumanHandPoseObservation) -> HandFrame? in
@@ -37,14 +40,20 @@ public final class VisionHandTracker: HandTracker {
                     pts[idx] = (Double(point.location.x), Double(point.location.y), Double(point.confidence))
                 }
             }
-            guard pts[Landmark.wrist] != nil else { return nil }
-            guard let wristX = pts[Landmark.wrist]?.x else { return nil }
-            // No handedness in Vision hand pose — assign by image side (un-mirrored
-            // Vision coords: person's right hand appears at x < 0.5). For the
-            // theremin mapping this is exactly the zone assignment we want.
-            let side: HandSide = wristX < 0.5 ? .right : .left
+            guard let wristX = pts[Landmark.wrist]?.x, let side = Self.assignSide(wristX: wristX) else { return nil }
             return Self.makeFrame(side: side, points: pts, timestamp: t)
         }
+    }
+
+    /// No handedness in Vision hand pose — assign by image side. Raw (.up)
+    /// coords: the user's right hand appears on the frame's left (low x), and
+    /// CameraPreview mirrors the video so the selfie view matches. A wrist in
+    /// the center band is ambiguous — skip it rather than risk flipping the
+    /// pitch/volume zones.
+    static func assignSide(wristX: Double) -> HandSide? {
+        if wristX < 0.4 { return .right }
+        if wristX > 0.6 { return .left }
+        return nil
     }
 
     /// Pure + fixture-testable: mirror X for selfie view, gate confidence,

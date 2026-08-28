@@ -22,6 +22,7 @@ public final class Theremin: Instrument {
     public private(set) var currentNote: UInt8?
     public private(set) var lastVolume: UInt8 = 0
     public private(set) var lastPinchAmount: Double = 1.0
+    public private(set) var vibratoActive = false
     private var pinch = PinchDetector()
     private var vibrato = VibratoEngine()
     private var vibratoDepthCents: Double = 0
@@ -41,10 +42,14 @@ public final class Theremin: Instrument {
         if let r = right {
             let x = r.points[Landmark.indexTip].x
             let xNorm = min(max((x - pitchBand.lowerBound) / (pitchBand.upperBound - pitchBand.lowerBound), 0), 1)
-            let pitch = MusicTheory.quantize(Double(root) + xNorm * 12 * octaves, scale: scale, root: root % 12)
+            // Vibrato taps the pre-quantization pitch — scale quantization is a
+            // staircase and would erase sub-semitone hand oscillation.
+            let raw = Double(root) + xNorm * 12 * octaves
+            let pitch = MusicTheory.quantize(raw, scale: scale, root: root % 12)
             currentPitch = pitch
-            let v = vibrato.process(pitch, dt: dt)
+            let v = vibrato.process(raw, dt: dt)
             vibratoDepthCents = v.depthCents * vibratoDepthScale
+            vibratoActive = v.active
         }
 
         // ---- volume (left wrist y, inverted: up = loud) ----
