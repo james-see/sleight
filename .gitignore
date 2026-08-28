@@ -1,0 +1,11 @@
+# Xcode
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+# XcodeGen output
+*.xcodeproj
+# macOS
+.DS_Store
+# build litter
+build/

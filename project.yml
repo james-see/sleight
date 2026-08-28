@@ -1,0 +1,36 @@
+name: sleight
+options:
+  bundleIdPrefix: us.jamescampbell
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    ARCHS: arm64
+    CODE_SIGN_STYLE: Automatic
+targets:
+  sleight:
+    type: application
+    platform: macOS
+    sources: [sleight]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: us.jamescampbell.sleight
+        INFOPLIST_KEY_NSCameraUsageDescription: "Sleight tracks your hands to play MIDI instruments."
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+  sleightTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [sleightTests]
+    dependencies:
+      - target: sleight
+schemes:
+  sleight:
+    build:
+      targets:
+        sleight: all
+        sleightTests: [test]
+    test:
+      targets: [sleightTests]
