@@ -46,6 +46,8 @@ final class Pipeline {
     let instrument: Theremin
     /// Mirror of the UI practice toggle (plain flag: read from the capture queue).
     var practiceMode = false
+    /// Observer hook (test synth listens here).
+    var onEvents: (([MIDIEvent]) -> Void)?
 
     private let tracker: HandTracker
     private var filters: [HandSide: [String: FilterBox]] = [:]
@@ -80,6 +82,7 @@ final class Pipeline {
         if !practiceMode {
             midiSource?.send(events, bendRange: instrument.bendRangeSemitones)
         }
+        onEvents?(events)
 
         publish(hands: filtered)
         lastDuration = Double(DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1e9
