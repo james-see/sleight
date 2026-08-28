@@ -24,6 +24,9 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources: [sleightTests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: sleight
 schemes:
