@@ -50,14 +50,28 @@ struct OverlayView: View {
                 ctx.fill(Path(fillRect), with: .color(blue.opacity(0.5)))
             }
 
-            // --- skeletons ---
+            // --- skeletons: proper finger chains, not one big polyline ---
+            // Landmark order is wrist; thumb 1-4; index 5-8; middle 9-12;
+            // ring 13-16; little 17-20. Connecting 0→1→…→20 in index order
+            // draws a zigzag web across the hand.
+            let chains: [[Int]] = [
+                [0, 1, 2, 3, 4],          // thumb
+                [0, 5, 6, 7, 8],          // index
+                [0, 9, 10, 11, 12],       // middle
+                [0, 13, 14, 15, 16],      // ring
+                [0, 17, 18, 19, 20],      // little
+                [1, 5, 9, 13, 17],        // palm (MCP webbing)
+            ]
             for (_, pts) in overlay.skeleton {
-                var path = Path()
-                for (i, pt) in pts.enumerated() {
-                    let loc = CGPoint(x: pt.x * size.width, y: pt.y * size.height)
-                    if i == 0 { path.move(to: loc) } else { path.addLine(to: loc) }
+                for chain in chains {
+                    var path = Path()
+                    for (i, idx) in chain.enumerated() where idx < pts.count {
+                        let p = pts[idx]
+                        let loc = CGPoint(x: p.x * size.width, y: p.y * size.height)
+                        if i == 0 { path.move(to: loc) } else { path.addLine(to: loc) }
+                    }
+                    ctx.stroke(path, with: .color(blue.opacity(0.85)), lineWidth: 2)
                 }
-                ctx.stroke(path, with: .color(blue.opacity(0.85)), lineWidth: 2)
                 for pt in pts {
                     let r: CGFloat = 3
                     let rect = CGRect(x: pt.x * size.width - r, y: pt.y * size.height - r, width: r * 2, height: r * 2)

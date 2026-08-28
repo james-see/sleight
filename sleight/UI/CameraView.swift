@@ -21,18 +21,32 @@ struct CameraPreview: NSViewRepresentable {
         override func layout() {
             super.layout()
             preview.frame = bounds
+            refreshMirroring()
+        }
+
+        /// The preview connection only exists once the session has inputs — which
+        /// happens later (startSession runs on appear). Setting isVideoMirrored in
+        /// makeNSView silently no-ops on a nil connection. Re-apply on every
+        /// layout pass instead; idempotent and cheap.
+        func refreshMirroring() {
+            guard let conn = preview.connection else { return }
+            if conn.automaticallyAdjustsVideoMirroring {
+                conn.automaticallyAdjustsVideoMirroring = false
+            }
+            if !conn.isVideoMirrored {
+                conn.isVideoMirrored = true   // selfie view: video mirrors to match overlay coords
+            }
         }
     }
 
     func makeNSView(context: Context) -> PreviewNSView {
         let v = PreviewNSView(frame: .zero)
         v.preview.session = session
-        if let conn = v.preview.connection {
-            conn.automaticallyAdjustsVideoMirroring = false
-            conn.isVideoMirrored = true   // selfie view: video mirrors to match overlay coords
-        }
+        v.refreshMirroring()
         return v
     }
 
-    func updateNSView(_ nsView: PreviewNSView, context: Context) {}
+    func updateNSView(_ nsView: PreviewNSView, context: Context) {
+        nsView.refreshMirroring()
+    }
 }
