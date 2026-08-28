@@ -58,7 +58,6 @@ final class CaptureService: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         cam.unlockForConfiguration()
 
         session.beginConfiguration()
-        defer { session.commitConfiguration() }
         session.sessionPreset = .high
 
         let input = try AVCaptureDeviceInput(device: cam)
@@ -71,6 +70,7 @@ final class CaptureService: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         output.setSampleBufferDelegate(self, queue: queue)
         guard session.canAddOutput(output) else { throw CaptureError.configurationFailed("cannot add video output") }
         session.addOutput(output)
+        session.commitConfiguration()
 
         session.startRunning()
         isRunning = session.isRunning
