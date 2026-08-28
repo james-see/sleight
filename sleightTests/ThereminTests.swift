@@ -28,6 +28,28 @@ final class ThereminTests: XCTestCase {
         XCTAssertTrue(evs.contains { if case .cc(7, _) = $0.kind { return true }; return false })
     }
 
+    /// Pinch tightness at articulation maps to note velocity: fully closed
+    /// pinch → 127, pinch just inside the on-threshold → soft but audible.
+    func testPinchTightnessSetsVelocity() {
+        let tight = Theremin()
+        let evTight = tight.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.0), leftHand(y: 0.4)], dt: 1/60)
+        let vTight = evTight.compactMap { if case .noteOn(_, let v) = $0.kind { return Int(v) }; return nil }.first
+        XCTAssertEqual(vTight, 127)
+
+        let loose = Theremin()
+        let evLoose = loose.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.34), leftHand(y: 0.4)], dt: 1/60)
+        let vLoose = evLoose.compactMap { if case .noteOn(_, let v) = $0.kind { return Int(v) }; return nil }.first
+        XCTAssertNotNil(vLoose)
+        XCTAssertGreaterThan(vLoose!, 30)
+        XCTAssertLessThan(vLoose!, 60)
+    }
+
+    func testVelocityHelperClampsOutOfRangeAmounts() {
+        XCTAssertEqual(Theremin.velocity(pinchAmount: -0.5, onThreshold: 0.35), 127)
+        XCTAssertEqual(Theremin.velocity(pinchAmount: 1.0, onThreshold: 0.35), 40)
+        XCTAssertEqual(Theremin.velocity(pinchAmount: 0.2, onThreshold: 0), 127) // degenerate guard
+    }
+
     func testHandXMapsToPitchMonotonically() {
         let t = Theremin()
         func pitchFor(_ x: Double) -> Double {

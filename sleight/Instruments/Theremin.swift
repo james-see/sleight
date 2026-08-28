@@ -16,6 +16,20 @@ public final class Theremin: Instrument {
     public var vibratoDepthScale: Double = 1.0
     public var defaultVolume: UInt8 = 100      // used when the left hand is absent
 
+    /// Softest velocity a pinch at the on-threshold can produce; a fully
+    /// closed pinch always articulates 127.
+    public static let minVelocity: UInt8 = 40
+
+    /// Pinch tightness → note velocity. `pinchAmount` is the normalized
+    /// thumb/index distance (0 = fully pinched); amounts at or beyond the
+    /// pinch on-threshold map to `minVelocity`, fully closed maps to 127.
+    /// Clamps out-of-range amounts and guards a degenerate zero threshold.
+    public static func velocity(pinchAmount: Double, onThreshold: Double) -> UInt8 {
+        guard onThreshold > 0 else { return 127 }
+        let closeness = 1 - min(max(pinchAmount / onThreshold, 0), 1)   // 1 = fully pinched
+        return UInt8((Double(minVelocity) + closeness * Double(127 - minVelocity)).rounded())
+    }
+
     // State
     public private(set) var currentPitch: Double = 60
     public private(set) var isGateOpen = false
@@ -87,14 +101,17 @@ public final class Theremin: Instrument {
             if !isGateOpen {
                 isGateOpen = true
                 currentNote = baseNote
-                events.append(MIDIEvent(kind: .noteOn(baseNote, velocity: 100), timestamp: t))
+                // velocity comes from how tight the pinch was at articulation
+                let vel = Self.velocity(pinchAmount: lastPinchAmount, onThreshold: pinch.onThreshold)
+                events.append(MIDIEvent(kind: .noteOn(baseNote, velocity: vel), timestamp: t))
             } else if baseNote != currentNote {
                 // base note crossed to a new integer → legible re-articulation
                 if let old = currentNote {
                     events.append(MIDIEvent(kind: .noteOff(old), timestamp: t))
                 }
                 currentNote = baseNote
-                events.append(MIDIEvent(kind: .noteOn(baseNote, velocity: 100), timestamp: t))
+                let vel = Self.velocity(pinchAmount: lastPinchAmount, onThreshold: pinch.onThreshold)
+                events.append(MIDIEvent(kind: .noteOn(baseNote, velocity: vel), timestamp: t))
             }
             // continuous expression while held
             events.append(MIDIEvent(kind: .pitchBendSemitones(bendSemitones()), timestamp: t))
