@@ -50,7 +50,7 @@ Future versions add more instruments (ribbon/strip, keyboard, bowed pads) built 
 | Filtering | One-Euro filter (Swift implementation, ~100 lines) | The AR/VR standard for low-latency adaptive smoothing |
 | MIDI | CoreMIDI (`MIDISourceCreate` virtual destination) | Zero config in Logic; appears as a MIDI source |
 | Test synth | AVAudioEngine + a simple oscillator/sampler | Self-contained, no dependencies |
-| UI | SwiftUI + Metal (overlay rendering) | SwiftUI chrome; Metal view for camera + overlay compositing |
+| UI | SwiftUI + AVCaptureVideoPreviewLayer + Canvas overlay | Native chrome; preview layer for camera, Canvas for skeleton/zones (Metal only if compositing perf demands) |
 | Build/CI | Xcode project, tag-triggered GitHub Actions release (build/sign/notarize/DMG) | Proven pattern from ltx-video-mac |
 | Tests | XCTest for engine/mapping/filter logic; manual QA checklist for latency | Pure-logic units are unit-testable; camera loop is not |
 
@@ -70,7 +70,7 @@ Camera (60fps) ──▶ [1] Capture ──▶ [2] Tracking ──▶ [3] Filter
 
 - **Stages 1–4 run on a serial pipeline off the main thread.** Each stage is a struct with a `process(_:)` step; the pipeline drops frames if tracking falls behind (never queues — stale frames are useless for a real-time instrument).
 - **Stage 5 fans out:** MIDI messages go to CoreMIDI; UI state (skeleton points, note, level) goes to the main thread via a `@MainActor` observable at display rate, decoupled from the 60fps pipeline.
-- **Timestamps come from `CMSampleTimingInfo.hostTimeInNanoseconds`** on every frame — the camera frame's host-time anchor becomes the MIDI timestamp. No synthetic timestamps anywhere.
+- **Timestamps:** each frame's presentation timestamp maps to mach absolute time for CoreMIDI; v1 anchors with `mach_absolute_time()` at sample delivery (<1ms deviation). No synthetic timestamps anywhere.
 
 ### 4.1 Capture
 - `AVCaptureSession` preset `.high`, front camera (sitting at desk facing camera), 60fps where the camera supports it (falls back to 30fps).
@@ -115,7 +115,7 @@ protocol Instrument {
 - MIDI 2.0/MPE deferred to v2 (per-note pitch bend, ±48 semitones, high res — the right long-term fit for continuous pitch; Logic's exact MPE-record behavior with Alchemy to be verified at build time).
 
 ### 4.6 Visual feedback / AR overlay (first-class)
-- Metal view composites, per frame: live camera image → 21-point hand skeletons with joint dots and bone lines → instrument-specific guides:
+- Overlay composites, per frame (preview layer + SwiftUI Canvas): live camera image → 21-point hand skeletons with joint dots and bone lines → instrument-specific guides:
   - Theremin: two translucent vertical bands (pitch zone on the right, volume zone on the left) with a moving cursor line and the current note name + octave inside the pitch band.
   - Pinch indicator: ring around thumb-index that closes/fills as pinch approaches the threshold.
   - Level meter inside the volume band.
@@ -200,4 +200,4 @@ sleight/
 
 - Name: **Sleight** (confirmed). Domain: sleightapp.xyz (purchased). GitHub: `james-see/sleight`.
 - Tagline: "Sleight of hand for your DAW."
-- Logo direction (later): a hand forming a pinch gesture over a waveform; minimal line art.
+- Logo/app icon direction (M5): minimal, geometric, monochromatic — a pinch gesture distilled to two arcs over a waveform. Palette: shades of the Hermes UI blue (sample the exact accent value from the running app's CSS at generation time). Generation tool: Gemini image generation on Google Cloud (gemini-2.5-flash-image via `google-genai` Python lib, project vala-466919 — `python -m pip install google-genai` on first use), then hand-tuned and exported to .iconset / appiconset.
