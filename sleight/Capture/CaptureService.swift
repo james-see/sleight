@@ -35,12 +35,26 @@ final class CaptureService: NSObject, AVCaptureVideoDataOutputSampleBufferDelega
         isRunning = false
     }
 
+    /// Chooses the frame rate to lock the camera to. Prefers 60 fps, but clamps to the
+    /// device's supported range — FaceTime HD / built-in cameras often cap at 30 fps, and
+    /// asking for 60 throws NSInvalidArgumentException at startup.
+    static func targetFrameRate(preference: Double = 60, ranges: [(min: Double, max: Double)]) -> Int32 {
+        if ranges.contains(where: { $0.min <= preference && $0.max >= preference }) {
+            return Int32(preference)
+        }
+        let best = ranges.map { $0.max }.max() ?? preference
+        let clamped = Int32(best.rounded(.down))
+        return max(clamped, 1)
+    }
+
     private func reallyStart() throws {
         guard let cam = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front)
                 ?? AVCaptureDevice.default(for: .video) else { throw CaptureError.noCamera }
         try cam.lockForConfiguration()
-        cam.activeVideoMinFrameDuration = CMTime(value: 1, timescale: 30)
-        cam.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: 60)
+        let supported = cam.activeFormat.videoSupportedFrameRateRanges.map { (min: $0.minFrameRate, max: $0.maxFrameRate) }
+        let duration = CMTime(value: 1, timescale: Self.targetFrameRate(ranges: supported))
+        cam.activeVideoMinFrameDuration = duration
+        cam.activeVideoMaxFrameDuration = duration
         cam.unlockForConfiguration()
 
         session.beginConfiguration()
