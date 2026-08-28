@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
@@ -17,10 +17,13 @@ jobs:
       - name: Generate project
         run: xcodegen
 
+      # Marker check instead of trusting the pipe: a failed xcodebuild used to
+      # hide behind `|| true` when grep had nothing to pass through.
       - name: Build and test
         run: |
           DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test \
             -project sleight.xcodeproj \
             -scheme sleight \
-            -destination 'platform=macOS' | \
-            grep -vE "autoShortcut|Connection|synchronousRemoteObjectProxy" || true
+            -destination 'platform=macOS' 2>&1 \
+            | tee build.log | grep -vE "autoShortcut|Connection|synchronousRemoteObjectProxy" || true
+          grep -q "TEST SUCCEEDED" build.log || { echo "::error::tests did not succeed"; exit 1; }
