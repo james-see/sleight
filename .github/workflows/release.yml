@@ -51,6 +51,7 @@ jobs:
             -configuration Release \
             -archivePath build/sleight.xcarchive \
             archive \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY" \
             DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
             MARKETING_VERSION="$VERSION"
