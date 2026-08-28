@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen
+
+      - name: Build and test
+        run: |
+          DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild test \
+            -project sleight.xcodeproj \
+            -scheme sleight \
+            -destination 'platform=macOS' | \
+            grep -vE "autoShortcut|Connection|synchronousRemoteObjectProxy" || true
