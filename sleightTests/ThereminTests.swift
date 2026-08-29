@@ -33,12 +33,12 @@ final class ThereminTests: XCTestCase {
     func testPinchTightnessSetsVelocity() {
         let tight = Theremin()
         let evTight = tight.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.0), leftHand(y: 0.4)], dt: 1/60)
-        let vTight = evTight.compactMap { if case .noteOn(_, let v) = $0.kind { return v }; return nil }.first
+        let vTight = evTight.compactMap { if case .noteOn(_, let v, _) = $0.kind { return v }; return nil }.first
         XCTAssertEqual(vTight ?? 0, 1.0, accuracy: 0.0001)
 
         let loose = Theremin()
         let evLoose = loose.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.34), leftHand(y: 0.4)], dt: 1/60)
-        let vLoose = evLoose.compactMap { if case .noteOn(_, let v) = $0.kind { return v }; return nil }.first
+        let vLoose = evLoose.compactMap { if case .noteOn(_, let v, _) = $0.kind { return v }; return nil }.first
         XCTAssertNotNil(vLoose)
         // v1 bounds in 7-bit were >30 && <60 (actual 42); same band as Double.
         XCTAssertGreaterThan(vLoose!, Double(30) / 127)
@@ -118,7 +118,7 @@ final class ThereminTests: XCTestCase {
             let evs = t.update(hands: [rightHand(x: x, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
             noteOns += evs.filter { if case .noteOn = $0.kind { return true }; return false }.count
             noteOffs += evs.filter { if case .noteOff = $0.kind { return true }; return false }.count
-            let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, _) = $0.kind { return n }; return nil }.first
+            let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, _, _) = $0.kind { return n }; return nil }.first
             XCTAssertNotNil(bend, "glide must keep streaming per-note bend")
         }
         XCTAssertLessThanOrEqual(noteOns, 1)
@@ -135,7 +135,7 @@ final class ThereminTests: XCTestCase {
         let held = t.currentNote!
         // move well past a semitone without crossing a quantized tone boundary
         let evs = t.update(hands: [rightHand(x: 0.80, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
-        let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s) = $0.kind { return (n, s) }; return nil }.first
+        let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s, _) = $0.kind { return (n, s) }; return nil }.first
         XCTAssertNotNil(bend)
         XCTAssertEqual(bend!.0, held)
         XCTAssertTrue(evs.allSatisfy { if case .noteOn = $0.kind { return false }; return true })
@@ -149,8 +149,8 @@ final class ThereminTests: XCTestCase {
         _ = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
         let held = t.currentNote!
         let evs = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.9), leftHand(y: 0.4)], dt: 1/60)
-        XCTAssertEqual(evs.filter { if case .noteOff(let n) = $0.kind { return n == held }; return false }.count, 1)
-        let reset = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s) = $0.kind, n == held { return s }; return nil }.last
+        XCTAssertEqual(evs.filter { if case .noteOff(let n, _) = $0.kind { return n == held }; return false }.count, 1)
+        let reset = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s, _) = $0.kind, n == held { return s }; return nil }.last
         XCTAssertEqual(reset ?? 1, 0, accuracy: 0.0001)   // bend centered
         XCTAssertFalse(evs.contains { if case .cc(7, 0) = $0.kind { return true }; return false })
     }
@@ -181,7 +181,7 @@ final class ThereminTests: XCTestCase {
         t.octaves = 2
         _ = t.update(hands: [rightHand(x: 0.55, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
         let evs = t.update(hands: [rightHand(x: 0.95, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
-        let bend = evs.compactMap { if case .perNotePitchBendSemitones(_, let s) = $0.kind { return s }; return nil }.first
+        let bend = evs.compactMap { if case .perNotePitchBendSemitones(_, let s, _) = $0.kind { return s }; return nil }.first
         XCTAssertNotNil(bend)
         XCTAssertGreaterThan(bend!, 24.0)   // raw span + vibrato transient exceeds the bend range
         var enc = UMPEncoder(mode: .ump, userBendRange: 2, glide: true)

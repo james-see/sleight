@@ -38,4 +38,28 @@ final class MIDIEventTests: XCTestCase {
         let e = MIDIEvent(kind: .cc(7, 64), timestamp: 6)
         XCTAssertEqual(e.encode(bendRangeSemitones: 2), [0xB0, 7, 64])
     }
+
+    func testNoteOnChannelDefaultsToZero() {
+        let e = MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0), timestamp: 0)
+        if case .noteOn(_, _, let ch) = e.kind { XCTAssertEqual(ch, 0) }
+        else { XCTFail("expected noteOn") }
+    }
+
+    func testNoteOffChannelDefaultsToZero() {
+        let e = MIDIEvent(kind: .noteOff(note: 60), timestamp: 0)
+        if case .noteOff(_, let ch) = e.kind { XCTAssertEqual(ch, 0) }
+        else { XCTFail("expected noteOff") }
+    }
+
+    func testPerNoteBendChannelDefaultsToZero() {
+        let e = MIDIEvent(kind: .perNotePitchBendSemitones(note: 60, 1.0), timestamp: 0)
+        if case .perNotePitchBendSemitones(_, _, let ch) = e.kind { XCTAssertEqual(ch, 0) }
+        else { XCTFail("expected perNotePitchBend") }
+    }
+
+    func testEventWithExplicitChannelRoundTrip() {
+        let e = MIDIEvent(kind: .noteOn(note: 64, velocity: 0.5, channel: 3), timestamp: 0)
+        if case .noteOn(_, _, let ch) = e.kind { XCTAssertEqual(ch, 3) }
+        else { XCTFail("expected noteOn") }
+    }
 }

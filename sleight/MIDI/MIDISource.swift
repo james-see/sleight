@@ -6,14 +6,14 @@ extension MIDIEvent {
     /// Kept as the legacy fixture reference for tests; the live send path is UMP.
     public func encode(bendRangeSemitones: Double) -> [UInt8] {
         switch kind {
-        case let .noteOn(note, velocity):
+        case let .noteOn(note, velocity, _):
             let v = UInt8((min(max(velocity, 0), 1) * 127).rounded())
             return [0x90, note, v]
-        case let .noteOff(note):
+        case let .noteOff(note, _):
             return [0x80, note, 0]
         case let .cc(controller, value):
             return [0xB0, controller, value]
-        case let .perNotePitchBendSemitones(_, semis):
+        case let .perNotePitchBendSemitones(_, semis, _):
             let clamped = min(max(semis / bendRangeSemitones, -1), 1)
             let v = 8192 + Int((clamped * 8191).rounded())
             return [0xE0, UInt8(v & 0x7F), UInt8((v >> 7) & 0x7F)]

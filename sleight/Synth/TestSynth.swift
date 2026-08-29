@@ -51,16 +51,16 @@ final class TestSynth {
         guard isEnabled else { return }
         for e in events {
             switch e.kind {
-            case let .noteOn(note, _):
+            case let .noteOn(note, _, _):
                 baseFreq = 440.0 * pow(2, (Double(note) - 69) / 12)
                 freq = baseFreq
                 targetLevel = 0.18
                 start()
-            case .noteOff:
+            case .noteOff(_):
                 targetLevel = 0
             case let .cc(7, value):
                 if targetLevel > 0 { targetLevel = Float(value) / 127 * 0.4 }
-            case let .perNotePitchBendSemitones(_, semis):
+            case let .perNotePitchBendSemitones(_, semis, _):
                 freq = baseFreq * pow(2, semis / 12)
             default:
                 break
