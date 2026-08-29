@@ -62,7 +62,7 @@ final class PipelineTests: XCTestCase {
         let settings = AppSettings()
         settings.arPadsEnabled = true
         settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        settings.voiceCount = 4
+        settings.padCount = 12
         let p = Pipeline(model: model, settings: settings)
         let frame = HandFrame(
             side: .right,
@@ -71,7 +71,8 @@ final class PipelineTests: XCTestCase {
         )
         _ = p.processSynthetic([frame], dt: 1/60)
         XCTAssertNotNil(model.overlay.arPads)
-        XCTAssertEqual(model.overlay.arPads?.count, 4)
+        XCTAssertEqual(model.overlay.arPads?.count, 12)
+        XCTAssertEqual(model.overlay.arPadNotes.count, 12)
     }
 
     @MainActor
@@ -111,11 +112,10 @@ final class PipelineTests: XCTestCase {
         let settings = AppSettings()
         settings.arPadsEnabled = true
         settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        settings.voiceCount = 4
+        settings.padCount = 12
         let p = Pipeline(model: model, settings: settings)
 
-        // Compute the pad layout to know where to place a finger.
-        let pads = ARPadLayout.compute(voiceCount: 4)
+        let pads = ARPadLayout.compute(padCount: 12)
         let targetPad = pads[0]
         let tipX = Double(targetPad.midX)
         let tipY = Double(targetPad.midY)

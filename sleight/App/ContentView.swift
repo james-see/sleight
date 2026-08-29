@@ -193,7 +193,11 @@ struct SettingsSheet: View {
                     Toggle("Show AR pad targets (Poly Pads)", isOn: Binding(
                         get: { controller.settings.arPadsEnabled },
                         set: { controller.settings.arPadsEnabled = $0; controller.applySettings() }))
-                    Text("Overlays augmented-reality pad targets in the camera view when the Poly Pads instrument is active.")
+                    Stepper("Pads: \(controller.settings.padCount)", value: Binding(
+                        get: { controller.settings.padCount },
+                        set: { controller.settings.padCount = $0; controller.applySettings() }
+                    ), in: 4...16)
+                    Text("Floating pads appear over the camera showing where to place your fingers. Hover over a pad, then curl your finger to press it. Each pad shows its note name.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

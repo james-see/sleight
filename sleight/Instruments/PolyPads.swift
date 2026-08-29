@@ -1,21 +1,28 @@
 import Foundation
 
-/// v2.1 instrument: per-finger polyphonic pads.
+/// v2.2 instrument: AR pad player.
 ///
-/// Right-hand fingers become independent voices:
-/// - Index (8), middle (12), ring (16), little (20) tips.
-/// - Y position within `pitchBand` maps to pitch (top = low, bottom = high).
-/// - Finger extension gates note on/off; retraction sends note-off.
-/// - Raw Y (pre-quantization) drives per-note pitch bend.
-/// - Left hand controls shared volume (CC7) — same pattern as Theremin.
-/// - Each finger is a fixed voice slot (0..voiceCount-1); channel comes from
-///   ChannelAllocator via voice index, not note number.
+/// When AR pads are enabled (default), each pad maps to a specific note.
+/// A note fires when a finger tip enters a pad rect; it releases when the
+/// finger tip leaves the pad. This is the "air tap" model — the most natural
+/// and repeatable interaction for 2D hand tracking. No curl or depth detection
+/// needed: the pad rect IS the key.
+///
+/// Up to 4 fingers can play simultaneously (index, middle, ring, little).
+/// Each finger is assigned to whichever pad it's currently inside. A finger
+/// can only play one pad at a time, and a pad can only be played by one finger.
+///
+/// When AR pads are disabled, falls back to the original extension-based gate
+/// with continuous Y-to-pitch mapping (v2.1 behavior).
+///
+/// Left hand controls shared volume (CC7) — same pattern as Theremin.
 public final class PolyPads: Instrument {
     public var id: String { "poly-pads" }
     public var displayName: String { "Poly Pads" }
 
     // MARK: Configuration
-    public var voiceCount: Int = 4          // 2–4
+    public var voiceCount: Int = 4          // legacy: 2-4 for extension mode
+    public var padCount: Int = 12           // v2.2: number of AR pads
     public var scale: Scale = .minorPentatonic
     public var root: Int = 60
     public var octaves: Double = 2
@@ -23,18 +30,21 @@ public final class PolyPads: Instrument {
     public var volumeBand: ClosedRange<Double> = 0.1...0.7
     public var defaultVolume: UInt8 = 100
 
-    /// AR pad layout (normalized rects). When set, finger Y snaps to the
-    /// center Y of whichever pad the finger tip is inside, producing a stable
-    /// quantized note. When nil, continuous Y-to-pitch mapping is used.
+    /// AR pad layout (normalized rects). When set, pads are the primary play mode.
     public var padLayout: [CGRect]? = nil
+    /// Pre-computed notes for each pad (set alongside padLayout).
+    public var padNotes: [UInt8]? = nil
 
-    /// Extension threshold (0…1). Finger is "extended" when the tip-to-MCP
-    /// distance, normalized by the palm size, exceeds this value.
+    /// Extension threshold (0-1). Finger is "extended" when tip-to-MCP distance,
+    /// normalized by palm size, exceeds this. Used for legacy extension gate.
     public var extensionThreshold: Double = 0.35
 
-    // MARK: State (per-voice)
-    private var voiceNotes: [Int: UInt8] = [:]     // voice → current note
-    private var voiceGateOpen: [Int: Bool] = [:]   // voice → gate state
+    // MARK: State (per-pad)
+    /// Which pads are currently sounding (pad index -> note). Read-only access
+    /// for the overlay to highlight pressed pads.
+    private(set) var activePads: [Int: UInt8] = [:]
+    /// Which fingers are currently inside a pad (finger index -> pad index).
+    private(set) var fingerPadAssignment: [Int: Int] = [:]
     private var lastVolume: UInt8 = 0
     private var clock: Double = 0
 
@@ -70,72 +80,144 @@ public final class PolyPads: Instrument {
             volume = lastVolume == 0 ? defaultVolume : lastVolume
         }
 
-        // ---- per-finger voices ----
-        if let r = right {
-            let palmSize = palmSize(of: r)
-            for v in 0..<voiceCount {
-                let tipIdx = Self.fingerTips[v]
-                let mcpIdx = Self.fingerMCPs[v]
-                let tip = r.points[tipIdx]
-                let mcp = r.points[mcpIdx]
-                guard tip.confidence > 0.5, mcp.confidence > 0.5 else { continue }
-
-                let extensionRatio = distance(tip, mcp) / max(palmSize, 0.001)
-                let extended = extensionRatio >= extensionThreshold
-                let prevOpen = voiceGateOpen[v] ?? false
-
-                if extended {
-                    // Determine Y for pitch: snap to pad center Y when finger is
-                    // inside an AR pad rect; otherwise use continuous finger Y.
-                    let snapY: Double
-                    if let layout = padLayout,
-                       let hitIdx = ARPadLayout.hitTest(
-                           CGPoint(x: tip.x, y: tip.y), pads: layout
-                       ) {
-                        snapY = Double(layout[hitIdx].midY)
-                    } else {
-                        snapY = tip.y
-                    }
-                    let yNorm = min(max((snapY - pitchBand.lowerBound) / (pitchBand.upperBound - pitchBand.lowerBound), 0), 1)
-                    let rawPitch = Double(root) + yNorm * 12 * octaves
-                    let pitch = MusicTheory.quantize(rawPitch, scale: scale, root: root % 12)
-                    let note = UInt8(pitch.rounded())
-
-                    if !prevOpen {
-                        // Note on
-                        let vel = min(max(extensionRatio, 0), 1)
-                        events.append(MIDIEvent(kind: .noteOn(note: note, velocity: vel, channel: UInt8(v + 1)), timestamp: t))
-                        voiceGateOpen[v] = true
-                        voiceNotes[v] = note
-                    } else {
-                        // Continuous: per-note bend from raw Y
-                        let bend = rawPitch - Double(note)
-                        events.append(MIDIEvent(kind: .perNotePitchBendSemitones(note: note, bend, channel: UInt8(v + 1)), timestamp: t))
-                    }
-                } else if prevOpen {
-                    // Note off
-                    if let note = voiceNotes[v] {
-                        events.append(MIDIEvent(kind: .noteOff(note: note, channel: UInt8(v + 1)), timestamp: t))
-                    }
-                    voiceGateOpen[v] = false
-                    voiceNotes.removeValue(forKey: v)
-                }
-            }
+        // ---- pad-based play mode ----
+        if let layout = padLayout, let notes = padNotes, !layout.isEmpty {
+            events.append(contentsOf: processPadMode(
+                right: right, layout: layout, notes: notes, t: t
+            ))
+        }
+        // ---- legacy extension-based play mode (no pads) ----
+        else if let r = right {
+            events.append(contentsOf: processExtensionMode(
+                right: r, t: t
+            ))
         } else {
-            // Right hand lost: close all voices
-            for v in 0..<voiceCount {
-                if voiceGateOpen[v] == true {
-                    if let note = voiceNotes[v] {
-                        events.append(MIDIEvent(kind: .noteOff(note: note, channel: UInt8(v + 1)), timestamp: t))
-                    }
-                    voiceGateOpen[v] = false
-                }
+            // Right hand lost: close everything
+            for (_, note) in activePads {
+                events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
             }
-            voiceNotes.removeAll()
+            activePads.removeAll()
+            fingerPadAssignment.removeAll()
         }
 
         if volume != lastVolume || !events.isEmpty {
             events.append(MIDIEvent(kind: .cc(7, volume), timestamp: t))
+        }
+        if left == nil { lastVolume = volume }
+
+        return events
+    }
+
+    // MARK: Pad mode (v2.2)
+
+    private func processPadMode(right: HandFrame?, layout: [CGRect], notes: [UInt8], t: Double) -> [MIDIEvent] {
+        var events: [MIDIEvent] = []
+        guard let r = right else {
+            // Hand lost: release all active pads
+            for (_, note) in activePads {
+                events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
+            }
+            activePads.removeAll()
+            fingerPadAssignment.removeAll()
+            return events
+        }
+
+        let fingerCount = min(Self.fingerTips.count, 4)  // index, middle, ring, little
+
+        // Track which pads are hit this frame (finger inside rect)
+        var padsHitThisFrame: Set<Int> = []
+
+        for f in 0..<fingerCount {
+            let tipIdx = Self.fingerTips[f]
+            let tip = r.points[tipIdx]
+            guard tip.confidence > 0.5 else { continue }
+
+            let tipPoint = CGPoint(x: tip.x, y: tip.y)
+
+            // Which pad is this finger inside?
+            guard let padIdx = ARPadLayout.hitTest(tipPoint, pads: layout) else {
+                // Finger not inside any pad — if it was playing one, release
+                if let prevPad = fingerPadAssignment[f] {
+                    if let note = activePads[prevPad] {
+                        events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
+                    }
+                    activePads.removeValue(forKey: prevPad)
+                    fingerPadAssignment.removeValue(forKey: f)
+                }
+                continue
+            }
+
+            padsHitThisFrame.insert(padIdx)
+            let note = notes[padIdx]
+            let wasPlaying = fingerPadAssignment[f] == padIdx
+
+            if !wasPlaying {
+                // Finger entered a new pad. If it was playing a different pad, release that first.
+                if let prevPad = fingerPadAssignment[f], prevPad != padIdx {
+                    if let prevNote = activePads[prevPad] {
+                        events.append(MIDIEvent(kind: .noteOff(note: prevNote, channel: 0), timestamp: t))
+                    }
+                    activePads.removeValue(forKey: prevPad)
+                }
+                // Play the new pad
+                events.append(MIDIEvent(kind: .noteOn(note: note, velocity: 0.8, channel: 0), timestamp: t))
+                activePads[padIdx] = note
+                fingerPadAssignment[f] = padIdx
+            }
+            // else: still inside the same pad, note sustains — no new events
+        }
+
+        // Release any active pads that no longer have a finger inside them
+        // (finger moved to a different pad or hand changed shape)
+        for (padIdx, note) in activePads {
+            if !padsHitThisFrame.contains(padIdx) {
+                let stillAssigned = fingerPadAssignment.values.contains(padIdx)
+                if !stillAssigned {
+                    events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
+                    activePads.removeValue(forKey: padIdx)
+                }
+            }
+        }
+
+        return events
+    }
+
+    // MARK: Legacy extension mode (v2.1 fallback)
+
+    private func processExtensionMode(right: HandFrame, t: Double) -> [MIDIEvent] {
+        var events: [MIDIEvent] = []
+        let palmSize = palmSize(of: right)
+
+        for v in 0..<voiceCount {
+            let tipIdx = Self.fingerTips[v]
+            let mcpIdx = Self.fingerMCPs[v]
+            let tip = right.points[tipIdx]
+            let mcp = right.points[mcpIdx]
+            guard tip.confidence > 0.5, mcp.confidence > 0.5 else { continue }
+
+            let extensionRatio = distance(tip, mcp) / max(palmSize, 0.001)
+            let extended = extensionRatio >= extensionThreshold
+
+            if extended {
+                let yNorm = min(max((tip.y - pitchBand.lowerBound) / (pitchBand.upperBound - pitchBand.lowerBound), 0), 1)
+                let rawPitch = Double(root) + yNorm * 12 * octaves
+                let pitch = MusicTheory.quantize(rawPitch, scale: scale, root: root % 12)
+                let note = UInt8(pitch.rounded())
+
+                if activePads[v] == nil {
+                    let vel = min(max(extensionRatio, 0), 1)
+                    events.append(MIDIEvent(kind: .noteOn(note: note, velocity: vel, channel: UInt8(v + 1)), timestamp: t))
+                    activePads[v] = note
+                } else {
+                    let bend = rawPitch - Double(note)
+                    events.append(MIDIEvent(kind: .perNotePitchBendSemitones(note: note, bend, channel: UInt8(v + 1)), timestamp: t))
+                }
+            } else if activePads[v] != nil {
+                if let note = activePads[v] {
+                    events.append(MIDIEvent(kind: .noteOff(note: note, channel: UInt8(v + 1)), timestamp: t))
+                }
+                activePads.removeValue(forKey: v)
+            }
         }
 
         return events

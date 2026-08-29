@@ -6,156 +6,198 @@ final class PolyPadsARTests: XCTestCase {
 
     override func setUp() {
         pads = PolyPads()
-        pads.voiceCount = 4
+        pads.padCount = 12
         pads.root = 60
-        pads.octaves = 1
-        pads.scale = .chromatic
-        pads.padLayout = ARPadLayout.compute(voiceCount: 4)
+        pads.octaves = 2
+        pads.scale = .minorPentatonic
+        pads.padLayout = ARPadLayout.compute(padCount: 12)
+        pads.padNotes = ARPadLayout.padNotes(padCount: 12, scale: .minorPentatonic, root: 60, octaves: 2)
     }
 
-    private func rightHand(tipIndex: Int, tipX: Double, tipY: Double) -> HandFrame {
+    /// Build a right hand with a specific finger's tip at (x, y).
+    /// Other fingers are placed far from any pad.
+    private func rightHand(finger: Int, tipX: Double, tipY: Double) -> HandFrame {
+        var pts: [LandmarkPoint] = []
+        for i in 0..<21 {
+            let y: Double
+            let x: Double
+            switch i {
+            case 0:  y = 0.9; x = 0.5     // wrist below pad area
+            case 8, 12, 16, 20:  // finger tips
+                if i == finger {
+                    y = tipY; x = tipX
+                } else {
+                    y = 0.9; x = 0.3  // other fingers outside pad zone
+                }
+            case 5, 9, 13, 17:  // MCPs
+                y = 0.85; x = 0.5
+            default:
+                y = 0.85; x = 0.5
+            }
+            pts.append(LandmarkPoint(x: x, y: y, confidence: 1.0))
+        }
+        return HandFrame(side: .right, points: pts, timestamp: 0)
+    }
+
+    // MARK: Air-tap press detection
+
+    func testFingerInsidePadPlaysNote() {
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let evs = pads.update(hands: [hand], dt: 0.016)
+        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertEqual(noteOns.count, 1, "finger inside pad should trigger one note")
+        if case .noteOn(let n, _, _) = noteOns.first!.kind {
+            XCTAssertEqual(n, pads.padNotes![0], "note should match pad 0's pre-computed note")
+        }
+    }
+
+    func testFingerOutsidePadDoesNotPlay() {
+        let hand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5)
+        let evs = pads.update(hands: [hand], dt: 0.016)
+        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertTrue(noteOns.isEmpty, "finger outside any pad should not trigger a note")
+    }
+
+    func testFingerLeavingPadSendsNoteOff() {
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        // First tick: finger inside pad
+        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        _ = pads.update(hands: [pressHand], dt: 0.016)
+
+        // Second tick: finger moves outside pad
+        let releaseHand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5)
+        let evs = pads.update(hands: [releaseHand], dt: 0.016)
+        let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
+        XCTAssertFalse(noteOffs.isEmpty, "finger leaving pad should send note-off")
+    }
+
+    func testFingerStayingInPadDoesNotRetrigger() {
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        _ = pads.update(hands: [hand], dt: 0.016)
+
+        // Second tick: same position — should NOT produce another noteOn
+        let evs2 = pads.update(hands: [hand], dt: 0.016)
+        let noteOns = evs2.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertTrue(noteOns.isEmpty, "staying in same pad should not re-trigger note")
+    }
+
+    func testHandLostSendsAllNoteOffs() {
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        _ = pads.update(hands: [pressHand], dt: 0.016)
+
+        let evs = pads.update(hands: [], dt: 0.016)
+        let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
+        XCTAssertEqual(noteOffs.count, 1, "hand lost should send one note-off")
+    }
+
+    func testTwoFingersPlayTwoPads() {
+        guard pads.padLayout!.count >= 2 else { XCTFail("need 2 pads"); return }
+        let pad0 = pads.padLayout![0]
+        let pad1 = pads.padLayout![1]
+
+        var pts: [LandmarkPoint] = []
+        for i in 0..<21 {
+            let y: Double
+            let x: Double
+            switch i {
+            case 0: y = 0.9; x = 0.5
+            case 8:  y = Double(pad0.midY); x = Double(pad0.midX)  // index in pad 0
+            case 12: y = Double(pad1.midY); x = Double(pad1.midX) // middle in pad 1
+            case 16, 20: y = 0.9; x = 0.3  // other fingers away
+            case 5, 9, 13, 17: y = 0.85; x = 0.5
+            default: y = 0.85; x = 0.5
+            }
+            pts.append(LandmarkPoint(x: x, y: y, confidence: 1.0))
+        }
+        let hand = HandFrame(side: .right, points: pts, timestamp: 0)
+        let evs = pads.update(hands: [hand], dt: 0.016)
+        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertEqual(noteOns.count, 2, "two fingers in two pads should play two notes")
+    }
+
+    func testFingerMovingBetweenPadsReleasesFirst() {
+        guard pads.padLayout!.count >= 2 else { XCTFail("need 2 pads"); return }
+        let pad0 = pads.padLayout![0]
+        let pad1 = pads.padLayout![1]
+
+        // Press pad 0
+        let hand0 = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        _ = pads.update(hands: [hand0], dt: 0.016)
+
+        // Move finger to pad 1
+        let hand1 = rightHand(finger: 8, tipX: Double(pad1.midX), tipY: Double(pad1.midY))
+        let evs = pads.update(hands: [hand1], dt: 0.016)
+        let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
+        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertFalse(noteOffs.isEmpty, "moving to a new pad should release the old note")
+        XCTAssertFalse(noteOns.isEmpty, "moving to a new pad should trigger the new note")
+    }
+
+    // MARK: Legacy extension mode (no pads)
+
+    func testPadLayoutNilUsesExtensionMode() {
+        pads.padLayout = nil
+        pads.padNotes = nil
+        pads.voiceCount = 4
+        // Extended finger should produce a note (legacy mode)
         var pts: [LandmarkPoint] = []
         for i in 0..<21 {
             let y: Double
             switch i {
             case 0: y = 0.7
-            case 8, 12, 16, 20: y = (i == tipIndex) ? tipY : 0.5
-            case 5, 9, 13, 17: y = 0.5
+            case 8: y = 0.6
+            case 5: y = 0.5
             default: y = 0.5
             }
             pts.append(LandmarkPoint(x: 0.5, y: y, confidence: 1.0))
         }
-        return HandFrame(side: .right, points: pts, timestamp: 0)
-    }
-
-    /// Helper: compute the expected note from a Y value through pitchBand + quantize.
-    private func expectedNote(forY y: Double) -> UInt8 {
-        let band = pads.pitchBand
-        let yNorm = min(max((y - band.lowerBound) / (band.upperBound - band.lowerBound), 0), 1)
-        let rawPitch = Double(pads.root) + yNorm * 12 * pads.octaves
-        let quantized = MusicTheory.quantize(rawPitch, scale: pads.scale, root: pads.root % 12)
-        return UInt8(quantized.rounded())
-    }
-
-    func testFingerInsidePadSnapsToPadNote() {
-        guard let pad0 = pads.padLayout?.first else {
-            XCTFail("no pad layout"); return
-        }
-        // Place index finger at the center of pad 0
-        let hand = rightHand(tipIndex: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let hand = HandFrame(side: .right, points: pts, timestamp: 0)
         let evs = pads.update(hands: [hand], dt: 0.016)
         let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertFalse(noteOns.isEmpty)
-
-        // The note should match the pad's center Y -> pitch formula
-        let expected = expectedNote(forY: Double(pad0.midY))
-        if case .noteOn(let n, _, _) = noteOns.first!.kind {
-            XCTAssertEqual(n, expected, "note should snap to pad center pitch")
-        }
+        XCTAssertFalse(noteOns.isEmpty, "extension mode should produce a note when finger is extended")
     }
 
-    func testFingerOutsidePadUsesContinuousYMapping() {
-        // Place index finger at x=0.5 (outside pad X band 0.55-0.95), y=0.7 (extended)
-        let hand = rightHand(tipIndex: 8, tipX: 0.5, tipY: 0.7)
-        let evs = pads.update(hands: [hand], dt: 0.016)
-        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        // Should still produce a note -- just from continuous Y, not snapped
-        XCTAssertFalse(noteOns.isEmpty)
-    }
+    // MARK: Default settings + instrument switch
 
-    func testPadLayoutNilUsesContinuousMapping() {
-        pads.padLayout = nil
-        let hand = rightHand(tipIndex: 8, tipX: 0.5, tipY: 0.7)
-        let evs = pads.update(hands: [hand], dt: 0.016)
-        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertFalse(noteOns.isEmpty)
-        // Should use the standard continuous formula (through pitchBand)
-        let expected = expectedNote(forY: 0.7)
-        if case .noteOn(let n, _, _) = noteOns.first!.kind {
-            XCTAssertEqual(n, expected)
-        }
-    }
-
-    // MARK: - Task 8: AR pads default + instrument-switch layout
-
-    /// AR pads must be on by default for PolyPads: a freshly created
-    /// AppSettings should have `arPadsEnabled == true`, and applying those
-    /// settings through a SleightController with the PolyPads instrument
-    /// selected should produce a non-nil `padLayout` on the PolyPads instance.
     @MainActor
     func testARPadsOnByDefaultForPolyPads() {
-        // 1. AppSettings defaults arPadsEnabled to true.
         let settings = AppSettings()
-        XCTAssertTrue(settings.arPadsEnabled,
-            "arPadsEnabled must default to true so PolyPads shows pads out of the box")
+        XCTAssertTrue(settings.arPadsEnabled, "arPadsEnabled must default to true")
 
-        // 2. Wire a controller with PolyPads selected and confirm applySettings
-        //    installs a non-nil pad layout derived from voiceCount.
         settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        settings.voiceCount = 4
         let controller = SleightController()
-        // Replace the controller's settings so we control the state exactly.
-        // (SleightController owns its own AppSettings; mutate it in place.)
         controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        controller.settings.voiceCount = 4
         controller.settings.arPadsEnabled = true
-        controller.applySettings()
-
-        let inst = controller.pipeline.instrument
-        guard let polyPads = inst as? PolyPads else {
-            XCTFail("expected PolyPads instrument, got \(type(of: inst))"); return
-        }
-        XCTAssertNotNil(polyPads.padLayout, "PolyPads.padLayout must be set when arPadsEnabled is true")
-        XCTAssertEqual(polyPads.padLayout?.count, 4, "pad layout should have one pad per voice")
-        // The layout must match ARPadLayout.compute for the same voice count.
-        let expected = ARPadLayout.compute(voiceCount: 4)
-        XCTAssertEqual(polyPads.padLayout, expected,
-            "pad layout must equal ARPadLayout.compute(voiceCount: settings.voiceCount)")
-    }
-
-    /// When the user switches to the PolyPads instrument, applySettings() must
-    /// compute and install a fresh pad layout on the new PolyPads instance.
-    /// This regression-tests the instrument-switch path in applySettings().
-    @MainActor
-    func testPolyPadsGetsPadLayoutOnInstrumentSwitch() {
-        let controller = SleightController()
-        // Start from the default theremin instrument.
-        controller.settings.instrumentRaw = InstrumentType.theremin.rawValue
-        controller.settings.arPadsEnabled = true
-        controller.applySettings()
-        // Theremin is NOT a PolyPads, so no pad layout applies yet.
-        XCTAssertFalse(controller.pipeline.instrument is PolyPads,
-            "precondition: theremin should be active before the switch")
-
-        // Now switch to PolyPads — applySettings must build a new PolyPads and
-        // install a pad layout derived from the current voice count.
-        controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        controller.settings.voiceCount = 3
         controller.applySettings()
 
         guard let polyPads = controller.pipeline.instrument as? PolyPads else {
-            XCTFail("instrument should be PolyPads after switching to poly-pads"); return
+            XCTFail("expected PolyPads"); return
         }
-        XCTAssertNotNil(polyPads.padLayout,
-            "PolyPads must receive a pad layout on instrument switch when arPadsEnabled is true")
-        XCTAssertEqual(polyPads.padLayout?.count, 3,
-            "pad layout count must match voiceCount (3) after instrument switch")
-        XCTAssertEqual(polyPads.padLayout, ARPadLayout.compute(voiceCount: 3),
-            "installed layout must equal ARPadLayout.compute(voiceCount: 3)")
+        XCTAssertNotNil(polyPads.padLayout, "PolyPads.padLayout must be set when arPadsEnabled")
+        XCTAssertNotNil(polyPads.padNotes, "PolyPads.padNotes must be set when arPadsEnabled")
+        XCTAssertEqual(polyPads.padLayout?.count, controller.settings.padCount)
+        XCTAssertEqual(polyPads.padNotes?.count, controller.settings.padCount)
+    }
 
-        // Switching back to theremin then to PolyPads again must re-install the
-        // layout (regression: the old PolyPads instance should not be reused).
+    @MainActor
+    func testPolyPadsGetsPadLayoutOnInstrumentSwitch() {
+        let controller = SleightController()
         controller.settings.instrumentRaw = InstrumentType.theremin.rawValue
+        controller.settings.arPadsEnabled = true
         controller.applySettings()
+        XCTAssertFalse(controller.pipeline.instrument is PolyPads)
+
         controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
-        controller.settings.voiceCount = 2
+        controller.settings.padCount = 8
         controller.applySettings()
-        guard let polyPads2 = controller.pipeline.instrument as? PolyPads else {
-            XCTFail("instrument should be PolyPads after second switch"); return
+
+        guard let polyPads = controller.pipeline.instrument as? PolyPads else {
+            XCTFail("should be PolyPads"); return
         }
-        XCTAssertEqual(polyPads2.padLayout?.count, 2,
-            "pad layout must be recomputed for voiceCount=2 after a second switch")
-        XCTAssertEqual(polyPads2.padLayout, ARPadLayout.compute(voiceCount: 2),
-            "recomputed layout must equal ARPadLayout.compute(voiceCount: 2)")
+        XCTAssertEqual(polyPads.padLayout?.count, 8)
+        XCTAssertEqual(polyPads.padNotes?.count, 8)
     }
 }

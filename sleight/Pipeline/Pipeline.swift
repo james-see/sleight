@@ -17,7 +17,9 @@ struct OverlayState {
     var arButtonRect: CGRect?
     var arButtonPressed: Bool = false
     var arPads: [CGRect]?
-    var arPadHits: Set<Int> = []
+    var arPadHits: Set<Int> = []       // hovering (finger inside rect)
+    var arPadNotes: [UInt8] = []       // note for each pad
+    var arPadsPressed: Set<Int> = []   // actively pressed (curl detected)
 }
 
 enum DropPolicy {
@@ -165,10 +167,18 @@ final class Pipeline {
 
         // AR pad layout: only when enabled and instrument is polyPads.
         let arPadLayout: [CGRect]
+        let arPadNotes: [UInt8]
         if settings.arPadsEnabled, settings.instrumentType == .polyPads {
-            arPadLayout = ARPadLayout.compute(voiceCount: settings.voiceCount)
+            arPadLayout = ARPadLayout.compute(padCount: settings.padCount)
+            arPadNotes = ARPadLayout.padNotes(
+                padCount: settings.padCount,
+                scale: settings.scale,
+                root: settings.root,
+                octaves: settings.octaves
+            )
         } else {
             arPadLayout = []
+            arPadNotes = []
         }
 
         // Hit-test finger tips against pads.
@@ -202,7 +212,18 @@ final class Pipeline {
                 return rect.contains(tip)
             }(),
             arPads: arPadLayout.isEmpty ? nil : arPadLayout,
-            arPadHits: arPadHits
+            arPadHits: arPadHits,
+            arPadNotes: arPadNotes,
+            arPadsPressed: {
+                // Determine pressed pads from the instrument's active state
+                if let pads = inst as? PolyPads, let layout = pads.padLayout {
+                    return Set(layout.indices.filter { idx in
+                        pads.activePads.keys.contains(idx) ||
+                        pads.fingerPadAssignment.values.contains(idx)
+                    })
+                }
+                return []
+            }()
         )
         if synchronous {
             MainActor.assumeIsolated {
