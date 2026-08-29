@@ -103,4 +103,90 @@ final class ThereminTests: XCTestCase {
         XCTAssertNil(t.currentNote)
         XCTAssertFalse(t.isGateOpen)
     }
+
+    // ---- glide (v2) ----
+
+    /// While gliding, crossing many scale tones must NOT re-articulate:
+    /// one noteOn, continuous per-note bends, no noteOff in between.
+    func testGlideHoldsSingleNoteAcrossScaleTones() {
+        let t = Theremin()
+        t.glideMode = .glide
+        _ = t.update(hands: [rightHand(x: 0.56, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        XCTAssertTrue(t.isGateOpen)
+        var noteOns = 0, noteOffs = 0
+        for x in stride(from: 0.57, through: 0.94, by: 0.01) {
+            let evs = t.update(hands: [rightHand(x: x, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+            noteOns += evs.filter { if case .noteOn = $0.kind { return true }; return false }.count
+            noteOffs += evs.filter { if case .noteOff = $0.kind { return true }; return false }.count
+            let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, _) = $0.kind { return n }; return nil }.first
+            XCTAssertNotNil(bend, "glide must keep streaming per-note bend")
+        }
+        XCTAssertLessThanOrEqual(noteOns, 1)
+        XCTAssertEqual(noteOffs, 0)
+    }
+
+    /// Articulation still snaps to the nearest scale tone (scale decides where
+    /// you land); while gliding the bend tracks the RAW hand position.
+    func testGlideBendFollowsRawPitchNotQuantized() {
+        let t = Theremin()
+        t.glideMode = .glide
+        t.octaves = 2
+        _ = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        let held = t.currentNote!
+        // move well past a semitone without crossing a quantized tone boundary
+        let evs = t.update(hands: [rightHand(x: 0.80, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        let bend = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s) = $0.kind { return (n, s) }; return nil }.first
+        XCTAssertNotNil(bend)
+        XCTAssertEqual(bend!.0, held)
+        XCTAssertTrue(evs.allSatisfy { if case .noteOn = $0.kind { return false }; return true })
+    }
+
+    /// Gate close in glide mode: noteOff + bend-center reset, and NO cc7=0
+    /// (volume is held, not floored — one-handed re-pinch keeps the level).
+    func testGateCloseEmitsBendResetAndKeepsVolume() {
+        let t = Theremin()
+        t.glideMode = .glide
+        _ = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        let held = t.currentNote!
+        let evs = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.9), leftHand(y: 0.4)], dt: 1/60)
+        XCTAssertEqual(evs.filter { if case .noteOff(let n) = $0.kind { return n == held }; return false }.count, 1)
+        let reset = evs.compactMap { if case .perNotePitchBendSemitones(let n, let s) = $0.kind, n == held { return s }; return nil }.last
+        XCTAssertEqual(reset ?? 1, 0, accuracy: 0.0001)   // bend centered
+        XCTAssertFalse(evs.contains { if case .cc(7, 0) = $0.kind { return true }; return false })
+    }
+
+    /// Step mode keeps exact v1 re-articulation semantics.
+    func testSteppedModeRetriggersOnToneCrossing() {
+        let t = Theremin()
+        t.glideMode = .stepped
+        t.octaves = 2
+        _ = t.update(hands: [rightHand(x: 0.56, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        var articulations = 0
+        for x in stride(from: 0.57, through: 0.94, by: 0.01) {
+            let evs = t.update(hands: [rightHand(x: x, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+            articulations += evs.filter { if case .noteOn = $0.kind { return true }; return false }.count
+        }
+        XCTAssertGreaterThan(articulations, 8)   // pentatonic steps crossed
+    }
+
+    /// Spec §4.4: the sender-side clamp lives in the ENCODER, not the
+    /// instrument. Extreme raw offsets at the band edges must saturate the
+    /// wire word (full-scale bend), never wrap — Theremin emits unclamped and
+    /// the encoder folds it. This pins the composed pipeline: a hand jump
+    /// across the full 2-octave band produces a bend beyond the band span
+    /// (vibrato transient rides on top), and the encoder word is full-scale.
+    func testGlideExcursionAtBandEdgeSaturatesInEncoder() {
+        let t = Theremin()
+        t.glideMode = .glide
+        t.octaves = 2
+        _ = t.update(hands: [rightHand(x: 0.55, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        let evs = t.update(hands: [rightHand(x: 0.95, y: 0.5, pinchNorm: 0.2), leftHand(y: 0.4)], dt: 1/60)
+        let bend = evs.compactMap { if case .perNotePitchBendSemitones(_, let s) = $0.kind { return s }; return nil }.first
+        XCTAssertNotNil(bend)
+        XCTAssertGreaterThan(bend!, 24.0)   // raw span + vibrato transient exceeds the bend range
+        var enc = UMPEncoder(mode: .ump, userBendRange: 2, glide: true)
+        enc.octaveSpanSemitones = t.octaves * 12
+        let word = enc.encode(MIDIEvent(kind: .perNotePitchBendSemitones(note: 60, bend!), timestamp: 0))[1]
+        XCTAssertEqual(word, 0xFFFF_FFFF)   // encoder folds it to full-scale, no wraparound
+    }
 }

@@ -31,7 +31,10 @@ public final class Theremin: Instrument {
     }
 
     // State
+    public var glideMode: GlideMode = .glide
     public private(set) var currentPitch: Double = 60
+    /// Pre-quantization hand pitch (raw); glide bends from this to the held note.
+    public private(set) var currentRawPitch: Double = 60
     public private(set) var isGateOpen = false
     public private(set) var currentNote: UInt8?
     public private(set) var lastVolume: UInt8 = 0
@@ -59,6 +62,7 @@ public final class Theremin: Instrument {
             // Vibrato taps the pre-quantization pitch — scale quantization is a
             // staircase and would erase sub-semitone hand oscillation.
             let raw = Double(root) + xNorm * 12 * octaves
+            currentRawPitch = raw
             let pitch = MusicTheory.quantize(raw, scale: scale, root: root % 12)
             currentPitch = pitch
             let v = vibrato.process(raw, dt: dt)
@@ -104,8 +108,8 @@ public final class Theremin: Instrument {
                 // velocity comes from how tight the pinch was at articulation
                 let vel = Self.velocity(pinchAmount: lastPinchAmount, onThreshold: pinch.onThreshold)
                 events.append(MIDIEvent(kind: .noteOn(note: baseNote, velocity: vel), timestamp: t))
-            } else if baseNote != currentNote {
-                // base note crossed to a new integer → legible re-articulation
+            } else if glideMode == .stepped, baseNote != currentNote {
+                // stepped: crossing a tone = legible re-articulation (v1 behavior)
                 if let old = currentNote {
                     events.append(MIDIEvent(kind: .noteOff(note: old), timestamp: t))
                 }
@@ -113,18 +117,35 @@ public final class Theremin: Instrument {
                 let vel = Self.velocity(pinchAmount: lastPinchAmount, onThreshold: pinch.onThreshold)
                 events.append(MIDIEvent(kind: .noteOn(note: baseNote, velocity: vel), timestamp: t))
             }
-            // continuous expression while held
-            events.append(MIDIEvent(kind: .perNotePitchBendSemitones(note: baseNote, bendSemitones()), timestamp: t))
+            // Continuous expression while held. Glide bends from the RAW hand
+            // pitch to the held note (no re-triggers ever); stepped keeps v1's
+            // quantized-frac + vibrato shape.
+            if let n = currentNote {
+                let bend: Double
+                if glideMode == .glide {
+                    bend = (currentRawPitch - Double(n)) + vibratoDepthCents / 100
+                } else {
+                    bend = bendSemitones()
+                }
+                events.append(MIDIEvent(kind: .perNotePitchBendSemitones(note: n, bend), timestamp: t))
+            }
             events.append(MIDIEvent(kind: .cc(7, volume), timestamp: t))
         } else if isGateOpen {
-            // pinch released, volume floored, or right hand lost → safe note-off
+            // pinch released, volume floored, or hand lost → safe close: note-off
+            // + bend center reset (so a later articulation on the same note can't
+            // inherit a stale wild bend). Glide holds volume (no cc7=0).
             isGateOpen = false
             if let n = currentNote {
                 events.append(MIDIEvent(kind: .noteOff(note: n), timestamp: t))
+                if glideMode == .glide {
+                    events.append(MIDIEvent(kind: .perNotePitchBendSemitones(note: n, 0), timestamp: t))
+                }
             }
             currentNote = nil
-            events.append(MIDIEvent(kind: .cc(7, 0), timestamp: t))
-            lastVolume = 0
+            if glideMode == .stepped {
+                events.append(MIDIEvent(kind: .cc(7, 0), timestamp: t))
+                lastVolume = 0
+            }
         }
 
         return events
