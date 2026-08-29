@@ -2,6 +2,8 @@
 
 *Sleight of hand for your DAW.*
 
+![Sleight](sleight-promo.jpg)
+
 Sleight is a native macOS app that turns hand and finger movement — tracked from
 your webcam at 21 landmarks per hand via Apple Vision — into expressive MIDI.
 No gloves, no sensors, no calibration ritual. Your hands are the controller.
