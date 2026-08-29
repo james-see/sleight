@@ -85,7 +85,7 @@ final class Pipeline {
         let events = instrument.update(hands: filtered, dt: dt)
 
         if !practiceMode {
-            midiSource?.send(events, bendRange: instrument.bendRangeSemitones)
+            midiSource?.send(events)
         }
         onEvents?(events)
 
