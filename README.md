@@ -85,10 +85,40 @@ instrument), drops work when tracking falls behind, and every MIDI event is
 timestamped from the camera frame's host time. Hands leaving the frame always
 fire a note-off — no stuck notes, ever.
 
+## AR Pad Overlay (v2.2)
+
+When **AR Pads** is enabled (default for Poly Pads), floating semi-transparent
+pads appear over the camera preview showing you exactly where to land your
+fingers. Each pad maps to a note in your chosen scale — your finger snaps to
+the pad's pitch when it's inside the pad rect, and plays continuously when
+between pads. Pads highlight blue when hit.
+
+The pads use perspective styling (slight shrink with vertical position) to
+suggest depth, but tracking is 2D via Vision's normalized hand landmarks — no
+ARKit or 3D framework required. Pad layout auto-adjusts to your voice count
+(2–4 pads in a grid).
+
+## Audio Delegation (v2.2)
+
+Sleight's internal synth and MIDI broadcast are now decoupled:
+
+- **Auto-mute when DAW connected** (default on): when a MIDI host (Logic, etc.)
+  is detected via CoreMIDI destination polling, the internal synth auto-mutes.
+  MIDI still broadcasts to the host — you hear Logic's instruments, not Sleight's
+  test synth.
+- **Mute Sleight (Logic-only audio)**: manually silence the internal synth
+  without affecting MIDI. Previously, muting the synth also stopped MIDI output;
+  this is now fixed.
+- **Practice (silent)**: still mutes both synth and MIDI for silent practice.
+
+None of these settings gate `midiSource.send()` — MIDI always flows unless
+Practice mode is on.
+
 ## Roadmap
 
 - v2 ✅: MIDI 2.0 / MPE / MIDI 1.1 output (per-note pitch bend, 32-bit), glide mode
 - v2.1 ✅: per-finger polyphony (2–4 simultaneous MPE notes via Poly Pads)
+- v2.2 ✅: floating AR pad overlays + auto-mute synth when DAW connected
 - v3: ESP32 wireless-glove mode (IMU-fused tracking for away-from-desk play), AUv3 plugin, ribbon instrument
 
 ## License
