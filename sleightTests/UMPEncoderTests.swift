@@ -75,14 +75,14 @@ final class UMPEncoderTests: XCTestCase {
 
     func testMPENoteOnUsesChannel2Nibble() {
         // byte1 = 0x91 (ch index 1); velocity 127 for 1.0
-        let w = mpe().encode(MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0), timestamp: 0))
+        let w = mpe().encode(MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0, channel: 1), timestamp: 0))
         XCTAssertEqual(w, [0x2091_3C7F])
     }
 
     func testMPEPerNoteBendRange48() {
         // +1 semitone of ±48 → 8192 + round(8191/48) = 8192 + 171 = 8363 = 0x20AB
         // → lsb 0x2B msb 0x41 → data 0x412B
-        let w = mpe().encode(MIDIEvent(kind: .perNotePitchBendSemitones(note: 60, 1.0), timestamp: 0))
+        let w = mpe().encode(MIDIEvent(kind: .perNotePitchBendSemitones(note: 60, 1.0, channel: 1), timestamp: 0))
         XCTAssertEqual(w, [0x20E1_412B])   // bend on ch2 (byte1 0xE1), lsb|msb<<8
     }
 
@@ -124,5 +124,30 @@ final class UMPEncoderTests: XCTestCase {
         XCTAssertEqual(mpe().protocolID, MIDIProtocolID(rawValue: 1)!)
         XCTAssertEqual(legacy().wordsPerEvent, 1)
         XCTAssertEqual(ump().wordsPerEvent, 2)
+    }
+
+    func testMPENoteOnUsesExplicitChannel() {
+        let enc = UMPEncoder(mode: .mpe, userBendRange: 2, glide: false)
+        let e = MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0, channel: 3), timestamp: 0)
+        let words = enc.encode(e)
+        XCTAssertEqual(words.count, 1)
+        let channelNibble = (words[0] >> 16) & 0xF
+        XCTAssertEqual(channelNibble, 3)
+    }
+
+    func testLegacyUsesEventChannel() {
+        let enc = UMPEncoder(mode: .legacy, userBendRange: 2, glide: false)
+        let e = MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0, channel: 5), timestamp: 0)
+        let words = enc.encode(e)
+        let channelNibble = (words[0] >> 16) & 0xF
+        XCTAssertEqual(channelNibble, 5)
+    }
+
+    func testUMPModeIgnoresEventChannel() {
+        let enc = UMPEncoder(mode: .ump, userBendRange: 2, glide: false)
+        let e = MIDIEvent(kind: .noteOn(note: 60, velocity: 1.0, channel: 7), timestamp: 0)
+        let words = enc.encode(e)
+        let channelNibble = (words[0] >> 16) & 0xF
+        XCTAssertEqual(channelNibble, 0)
     }
 }

@@ -86,12 +86,12 @@ public struct UMPEncoder {
 
     private func encodeMPE(_ e: MIDIEvent) -> [UInt32] {
         switch e.kind {
-        case let .noteOn(note, velocity, _):
-            return [midi1(MIDICVStatus.noteOn.rawValue, 1, UInt32(note) << 8 | midi1Velocity(velocity))]
-        case let .noteOff(note, _):
-            return [midi1(MIDICVStatus.noteOff.rawValue, 1, UInt32(note) << 8)]
-        case let .perNotePitchBendSemitones(_, semis, _):
-            return [midi1(MIDICVStatus.pitchBend.rawValue, 1, midi1BendData(semis: semis))]
+        case let .noteOn(note, velocity, channel):
+            return [midi1(MIDICVStatus.noteOn.rawValue, UInt32(channel), UInt32(note) << 8 | midi1Velocity(velocity))]
+        case let .noteOff(note, channel):
+            return [midi1(MIDICVStatus.noteOff.rawValue, UInt32(channel), UInt32(note) << 8)]
+        case let .perNotePitchBendSemitones(_, semis, channel):
+            return [midi1(MIDICVStatus.pitchBend.rawValue, UInt32(channel), midi1BendData(semis: semis))]
         case let .cc(controller, value):
             return [midi1(MIDICVStatus.controlChange.rawValue, 0, UInt32(controller) << 8 | UInt32(value))]
         }
@@ -99,14 +99,14 @@ public struct UMPEncoder {
 
     private func encodeMIDI1(_ e: MIDIEvent, channel: UInt32) -> [UInt32] {
         switch e.kind {
-        case let .noteOn(note, velocity, _):
-            return [midi1(MIDICVStatus.noteOn.rawValue, channel, UInt32(note) << 8 | midi1Velocity(velocity))]
-        case let .noteOff(note, _):
-            return [midi1(MIDICVStatus.noteOff.rawValue, channel, UInt32(note) << 8)]
-        case let .perNotePitchBendSemitones(_, semis, _):
-            return [midi1(MIDICVStatus.pitchBend.rawValue, channel, midi1BendData(semis: semis))]
+        case let .noteOn(note, velocity, ch):
+            return [midi1(MIDICVStatus.noteOn.rawValue, UInt32(ch), UInt32(note) << 8 | midi1Velocity(velocity))]
+        case let .noteOff(note, ch):
+            return [midi1(MIDICVStatus.noteOff.rawValue, UInt32(ch), UInt32(note) << 8)]
+        case let .perNotePitchBendSemitones(_, semis, ch):
+            return [midi1(MIDICVStatus.pitchBend.rawValue, UInt32(ch), midi1BendData(semis: semis))]
         case let .cc(controller, value):
-            return [midi1(MIDICVStatus.controlChange.rawValue, channel, UInt32(controller) << 8 | UInt32(value))]
+            return [midi1(MIDICVStatus.controlChange.rawValue, 0, UInt32(controller) << 8 | UInt32(value))]
         }
     }
 
