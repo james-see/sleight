@@ -30,8 +30,8 @@ public final class MIDISource {
 
     private var client: MIDIClientRef = 0
     private var source: MIDIEndpointRef = 0
-    /// 64 KB — the documented maximum event-list size.
-    private var scratch = [UInt32](repeating: 0, count: 16384)
+    /// 2 KB — plenty for one packet header (5 words) + a full 64-word UMP packet.
+    private var scratch = [UInt32](repeating: 0, count: 512)
     private var encoder = UMPEncoder(mode: .ump, userBendRange: 2, glide: true)
 
     public private(set) var name: String
@@ -84,25 +84,39 @@ public final class MIDISource {
         return true
     }
 
-    /// Build one event list and transmit. Timestamps: mach_absolute_time "now"
-    /// (MIDIReceivedEventList requires the sender to stamp; 0 is NOT "now").
+    /// Transmit. Timestamps: mach_absolute_time "now" (MIDIReceivedEventList
+    /// requires the sender to stamp; 0 is NOT "now").
+    ///
+    /// The list is hand-packed into `scratch` using the public ABI layout
+    /// (MIDIEventList { protocol, numPackets, packet{timeStamp, wordCount,
+    /// words[]} }), then delivered with one MIDIReceivedEventList call per
+    /// message — no MIDIEventListAdd at all.
+    ///
+    /// CRITICAL: this must be scratch.withUnsafeMutableBytes { } (the Array
+    /// METHOD, pointing at the heap words), never the free function
+    /// withUnsafeMutableBytes(of: &scratch), which points at the array STRUCT
+    /// itself — writing the header there trashes the array's storage pointer
+    /// (self-destruction: x0=0x100000002=(protocol,numPackets), swift_retain
+    /// fault 0x100000008, the crash seen in app/test/probes on 2026-08-28).
     private func transmit(_ chunks: [[UInt32]]) {
         guard source != 0, !chunks.isEmpty else { return }
         let now: UInt64 = mach_absolute_time()
-        let listSize = MemoryLayout<UInt32>.size * scratch.count
-        let ok = withUnsafeMutableBytes(of: &scratch) { raw -> Bool in
-            let list = raw.baseAddress!.assumingMemoryBound(to: MIDIEventList.self)
-            var packet = MIDIEventListInit(list, encoder.protocolID)
-            for chunk in chunks {
-                chunk.withUnsafeBufferPointer { buf -> Void in
-                    guard let base = buf.baseAddress else { return }
-                    // Imports non-Optional in this SDK (no nullability annotation);
-                    // 64 KB scratch vs 1-2-word events means "no room" can't occur.
-                    packet = MIDIEventListAdd(list, listSize, packet, now, buf.count, base)
-                }
+        let capacity = scratch.count   // hoisted: checked outside the pointer closure
+        let protocolWord = UInt32(encoder.protocolID.rawValue)
+        for chunk in chunks where !chunk.isEmpty {
+            guard chunk.count <= 64, 5 + chunk.count <= capacity else { continue }
+            let ok = scratch.withUnsafeMutableBytes { raw -> Bool in
+                let base = raw.baseAddress!.assumingMemoryBound(to: UInt32.self)
+                base[0] = protocolWord                       // list.protocol
+                base[1] = 1                                  // list.numPackets = 1
+                base[2] = UInt32(truncatingIfNeeded: now)    // packet.timeStamp lo
+                base[3] = UInt32(truncatingIfNeeded: now >> 32) // packet.timeStamp hi
+                base[4] = UInt32(chunk.count)                // packet.wordCount
+                for (i, word) in chunk.enumerated() { base[5 + i] = word }
+                let list = raw.baseAddress!.assumingMemoryBound(to: MIDIEventList.self)
+                return MIDIReceivedEventList(source, list) == noErr
             }
-            return MIDIReceivedEventList(source, list) == noErr
+            if !ok { break }  // transient CoreMIDI failure; drop the rest of the batch
         }
-        if !ok { /* transient CoreMIDI failure; drop the batch silently */ }
     }
 }
