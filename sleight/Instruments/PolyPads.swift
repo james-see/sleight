@@ -23,6 +23,11 @@ public final class PolyPads: Instrument {
     public var volumeBand: ClosedRange<Double> = 0.1...0.7
     public var defaultVolume: UInt8 = 100
 
+    /// AR pad layout (normalized rects). When set, finger Y snaps to the
+    /// center Y of whichever pad the finger tip is inside, producing a stable
+    /// quantized note. When nil, continuous Y-to-pitch mapping is used.
+    public var padLayout: [CGRect]? = nil
+
     /// Extension threshold (0…1). Finger is "extended" when the tip-to-MCP
     /// distance, normalized by the palm size, exceeds this value.
     public var extensionThreshold: Double = 0.35
@@ -80,7 +85,18 @@ public final class PolyPads: Instrument {
                 let prevOpen = voiceGateOpen[v] ?? false
 
                 if extended {
-                    let yNorm = min(max((tip.y - pitchBand.lowerBound) / (pitchBand.upperBound - pitchBand.lowerBound), 0), 1)
+                    // Determine Y for pitch: snap to pad center Y when finger is
+                    // inside an AR pad rect; otherwise use continuous finger Y.
+                    let snapY: Double
+                    if let layout = padLayout,
+                       let hitIdx = ARPadLayout.hitTest(
+                           CGPoint(x: tip.x, y: tip.y), pads: layout
+                       ) {
+                        snapY = Double(layout[hitIdx].midY)
+                    } else {
+                        snapY = tip.y
+                    }
+                    let yNorm = min(max((snapY - pitchBand.lowerBound) / (pitchBand.upperBound - pitchBand.lowerBound), 0), 1)
                     let rawPitch = Double(root) + yNorm * 12 * octaves
                     let pitch = MusicTheory.quantize(rawPitch, scale: scale, root: root % 12)
                     let note = UInt8(pitch.rounded())
