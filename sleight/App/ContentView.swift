@@ -30,8 +30,15 @@ struct ContentView: View {
 
     private var toolbar: some View {
         HStack(spacing: 16) {
-            Label(controller.pipeline.instrument.displayName, systemImage: "waveform")
-                .frame(width: 150)
+            Picker("Instrument", selection: Binding(
+                get: { controller.settings.instrumentRaw },
+                set: { controller.settings.instrumentRaw = $0; controller.applySettings() }
+            )) {
+                ForEach(InstrumentType.allCases) { t in
+                    Text(t.rawValue).tag(t.rawValue)
+                }
+            }
+            .frame(width: 150)
 
             Toggle("Practice (silent)", isOn: Binding(
                 get: { controller.settings.practice },
@@ -158,6 +165,25 @@ struct SettingsSheet: View {
                             set: { controller.settings.glideRaw = $0 ? GlideMode.glide.rawValue : GlideMode.stepped.rawValue
                                 controller.applySettings() }))
                             .disabled(controller.settings.midiMode == .legacy)
+                    }
+                }
+            }
+
+            GroupBox("Instrument") {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Instrument", selection: Binding(
+                        get: { controller.settings.instrumentRaw },
+                        set: { controller.settings.instrumentRaw = $0; controller.applySettings() }
+                    )) {
+                        ForEach(InstrumentType.allCases) { t in
+                            Text(t.rawValue).tag(t.rawValue)
+                        }
+                    }
+                    if controller.settings.instrumentType == .polyPads {
+                        Stepper("Voices: \(controller.settings.voiceCount)", value: Binding(
+                            get: { controller.settings.voiceCount },
+                            set: { controller.settings.voiceCount = $0; controller.applySettings() }
+                        ), in: 2...4)
                     }
                 }
             }
