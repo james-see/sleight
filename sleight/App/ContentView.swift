@@ -114,34 +114,50 @@ struct SettingsSheet: View {
             }
 
             GroupBox("Music") {
-                HStack {
-                    Picker("Scale", selection: Binding(
-                        get: { controller.settings.scaleRaw },
-                        set: { controller.settings.scaleRaw = $0; controller.applySettings() })) {
-                        ForEach(Scale.allCases) { s in
-                            Text(s.rawValue).tag(s.rawValue)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Picker("Scale", selection: Binding(
+                            get: { controller.settings.scaleRaw },
+                            set: { controller.settings.scaleRaw = $0; controller.applySettings() })) {
+                            ForEach(Scale.allCases) { s in
+                                Text(s.rawValue).tag(s.rawValue)
+                            }
+                        }
+                        Picker("Root", selection: Binding(
+                            get: { controller.settings.root },
+                            set: { controller.settings.root = $0; controller.applySettings() })) {
+                            ForEach(48...72, id: \.self) { n in
+                                Text(MusicTheory.noteName(n)).tag(n)
+                            }
+                        }
+                        Picker("Octaves", selection: Binding(
+                            get: { controller.settings.octaves },
+                            set: { controller.settings.octaves = $0; controller.applySettings() })) {
+                            ForEach([1.0, 1.5, 2.0, 3.0], id: \.self) { o in
+                                Text("\(o, specifier: "%.1f")").tag(o)
+                            }
+                        }
+                        Picker("Bend range", selection: Binding(
+                            get: { controller.settings.bendRange },
+                            set: { controller.settings.bendRange = $0; controller.applySettings() })) {
+                            ForEach([1.0, 2.0, 4.0, 12.0], id: \.self) { r in
+                                Text("±\(Int(r)) st").tag(r)
+                            }
                         }
                     }
-                    Picker("Root", selection: Binding(
-                        get: { controller.settings.root },
-                        set: { controller.settings.root = $0; controller.applySettings() })) {
-                        ForEach(48...72, id: \.self) { n in
-                            Text(MusicTheory.noteName(n)).tag(n)
+                    HStack {
+                        Picker("MIDI protocol", selection: Binding(
+                            get: { controller.settings.midiModeRaw },
+                            set: { controller.settings.midiModeRaw = $0; controller.applySettings() })) {
+                            Text("MIDI 2.0 (UMP)").tag(MIDIMode.ump.rawValue)
+                            Text("MPE (MIDI 1.1)").tag(MIDIMode.mpe.rawValue)
+                            Text("MIDI 1.1").tag(MIDIMode.legacy.rawValue)
                         }
-                    }
-                    Picker("Octaves", selection: Binding(
-                        get: { controller.settings.octaves },
-                        set: { controller.settings.octaves = $0; controller.applySettings() })) {
-                        ForEach([1.0, 1.5, 2.0, 3.0], id: \.self) { o in
-                            Text("\(o, specifier: "%.1f")").tag(o)
-                        }
-                    }
-                    Picker("Bend range", selection: Binding(
-                        get: { controller.settings.bendRange },
-                        set: { controller.settings.bendRange = $0; controller.applySettings() })) {
-                        ForEach([1.0, 2.0, 4.0, 12.0], id: \.self) { r in
-                            Text("±\(Int(r)) st").tag(r)
-                        }
+                        Toggle("Glide", isOn: Binding(
+                            get: { controller.settings.glide == .glide && controller.settings.midiMode != .legacy },
+                            set: { controller.settings.glideRaw = $0 ? GlideMode.glide.rawValue : GlideMode.stepped.rawValue
+                                controller.applySettings() }))
+                            .disabled(controller.settings.midiMode == .legacy)
                     }
                 }
             }

@@ -23,9 +23,23 @@ https://sleightapp.xyz
 
 | Instrument | Status | Control scheme |
 |---|---|---|
-| Theremin | ✅ v1 | right-hand X → pitch · left-hand Y → volume · pinch → gate · 4–8 Hz oscillation → vibrato |
-| Ribbon | 🔜 v2 | 1D pitch strip + pressure |
+| Theremin | ✅ v2 | right-hand X → pitch · left-hand Y → volume · pinch → gate · 4–8 Hz oscillation → vibrato · glide while held |
+| Ribbon | 🔜 v3 | 1D pitch strip + pressure |
 | Keyboard grid | 🔜 later | novelty mode — a real keybed still wins for fast runs |
+
+## MIDI protocol
+
+Sleight emits three protocols from a virtual source named **Sleight** (Settings → MIDI protocol):
+
+| Mode | What you get | Use when |
+|---|---|---|
+| **MIDI 2.0 (UMP)** (default) | 16-bit velocity, 32-bit per-note pitch bend, explicit bend-range RPN | DAW + instruments with MIDI 2.0 support |
+| **MPE (MIDI 1.1)** | Standard MPE: global CC on ch 1, notes + per-note bend (±48) on ch 2 | Any MPE-capable instrument (most modern DAWs) |
+| **MIDI 1.1** | Classic bytes — pitch bend ±2 (user-selectable range) | Older hosts that only list MIDI 1.0 sources |
+
+**Glide**: while a note is held (pinched), pitch follows your hand continuously instead of stepping to the next scale tone — the scale quantizes where notes *start* (articulation), the smear between tones is the theremin sound. UMP and MPE only; the toggle is disabled in MIDI 1.1 mode.
+
+If your DAW doesn't list **Sleight** after a protocol change, it caches source enumeration: restart the DAW's MIDI device list (or switch the mode once more).
 
 ## Latency
 
@@ -72,8 +86,9 @@ fire a note-off — no stuck notes, ever.
 
 ## Roadmap
 
-- v2: MPE / MIDI 2.0 output (per-note pitch bend at full resolution), AUv3 plugin, ribbon instrument
-- v3: ESP32 wireless-glove mode (IMU-fused tracking for away-from-desk play)
+- v2 ✅: MIDI 2.0 / MPE / MIDI 1.1 output (per-note pitch bend, 32-bit), glide mode
+- v2.1: per-finger polyphony (2–4 simultaneous MPE notes)
+- v3: ESP32 wireless-glove mode (IMU-fused tracking for away-from-desk play), AUv3 plugin, ribbon instrument
 
 ## License
 

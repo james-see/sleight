@@ -13,6 +13,10 @@ final class SleightController: ObservableObject {
     private var started = false
     private var cancellables = Set<AnyCancellable>()
 
+    /// True when the last mode change failed to recreate the MIDI source
+    /// (settings show the requested mode; the source kept the last-good one).
+    @Published private(set) var midiConfigFailed = false
+
     init() {
         pipeline = Pipeline(model: model)
         capture.onFrame = { [weak self] pb in
@@ -43,6 +47,13 @@ final class SleightController: ObservableObject {
         inst.bendRangeSemitones = settings.bendRange
         pipeline.practiceMode = settings.practice
         synth.isEnabled = !settings.practice
+        inst.glideMode = settings.midiMode == .legacy ? .stepped : settings.glide
+        let octaveSpan = inst.octaves * 12
+        let ok = pipeline.midiSource?.configure(mode: settings.midiMode,
+                                                userBendRange: settings.bendRange,
+                                                octaveSpanSemitones: octaveSpan,
+                                                glide: inst.glideMode == .glide) ?? true
+        midiConfigFailed = !ok
     }
 
     func startSession() {
@@ -69,6 +80,6 @@ final class SleightController: ObservableObject {
         case .restricted: perm = "RESTRICTED"
         @unknown default: perm = "?"
         }
-        return "cam: \(p.device) | \(p.frame) | frames: \(p.frames) | vision: \(p.obs) obs → \(p.hands) hands | err: \(p.err) | perm: \(perm)"
+        return "cam: \(p.device) | \(p.frame) | frames: \(p.frames) | vision: \(p.obs) obs → \(p.hands) hands | err: \(p.err) | perm: \(perm) | midi: \(settings.midiMode.rawValue)\(midiConfigFailed ? " (RECREATE FAILED)" : "")"
     }
 }
