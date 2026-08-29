@@ -60,7 +60,7 @@ final class TestSynth {
                 targetLevel = 0
             case let .cc(7, value):
                 if targetLevel > 0 { targetLevel = Float(value) / 127 * 0.4 }
-            case let .pitchBendSemitones(semis):
+            case let .perNotePitchBendSemitones(_, semis):
                 freq = baseFreq * pow(2, semis / 12)
             default:
                 break

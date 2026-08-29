@@ -2,16 +2,17 @@ import Foundation
 import CoreMIDI
 
 extension MIDIEvent {
-    /// MIDI 1.1 channel-1 bytes.
+    /// MIDI 1.1 channel-1 bytes (unchanged numbers; Double velocity rounds to 7-bit).
     public func encode(bendRangeSemitones: Double) -> [UInt8] {
         switch kind {
         case let .noteOn(note, velocity):
-            return [0x90, note, velocity]
+            let v = UInt8((min(max(velocity, 0), 1) * 127).rounded())
+            return [0x90, note, v]
         case let .noteOff(note):
             return [0x80, note, 0]
         case let .cc(controller, value):
             return [0xB0, controller, value]
-        case let .pitchBendSemitones(semis):
+        case let .perNotePitchBendSemitones(_, semis):
             let clamped = min(max(semis / bendRangeSemitones, -1), 1)
             let v = 8192 + Int((clamped * 8191).rounded())
             return [0xE0, UInt8(v & 0x7F), UInt8((v >> 7) & 0x7F)]

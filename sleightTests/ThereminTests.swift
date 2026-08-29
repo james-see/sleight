@@ -24,30 +24,31 @@ final class ThereminTests: XCTestCase {
         let evs = t.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.2),
                                    leftHand(y: 0.4)], dt: 1/60)
         XCTAssertTrue(evs.contains { if case .noteOn = $0.kind { return true }; return false })
-        XCTAssertTrue(evs.contains { if case .pitchBendSemitones = $0.kind { return true }; return false })
+        XCTAssertTrue(evs.contains { if case .perNotePitchBendSemitones = $0.kind { return true }; return false })
         XCTAssertTrue(evs.contains { if case .cc(7, _) = $0.kind { return true }; return false })
     }
 
     /// Pinch tightness at articulation maps to note velocity: fully closed
-    /// pinch → 127, pinch just inside the on-threshold → soft but audible.
+    /// pinch → 1.0 (127), pinch just inside the on-threshold → soft but audible.
     func testPinchTightnessSetsVelocity() {
         let tight = Theremin()
         let evTight = tight.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.0), leftHand(y: 0.4)], dt: 1/60)
-        let vTight = evTight.compactMap { if case .noteOn(_, let v) = $0.kind { return Int(v) }; return nil }.first
-        XCTAssertEqual(vTight, 127)
+        let vTight = evTight.compactMap { if case .noteOn(_, let v) = $0.kind { return v }; return nil }.first
+        XCTAssertEqual(vTight ?? 0, 1.0, accuracy: 0.0001)
 
         let loose = Theremin()
         let evLoose = loose.update(hands: [rightHand(x: 0.75, y: 0.5, pinchNorm: 0.34), leftHand(y: 0.4)], dt: 1/60)
-        let vLoose = evLoose.compactMap { if case .noteOn(_, let v) = $0.kind { return Int(v) }; return nil }.first
+        let vLoose = evLoose.compactMap { if case .noteOn(_, let v) = $0.kind { return v }; return nil }.first
         XCTAssertNotNil(vLoose)
-        XCTAssertGreaterThan(vLoose!, 30)
-        XCTAssertLessThan(vLoose!, 60)
+        // v1 bounds in 7-bit were >30 && <60 (actual 42); same band as Double.
+        XCTAssertGreaterThan(vLoose!, Double(30) / 127)
+        XCTAssertLessThan(vLoose!, Double(60) / 127)
     }
 
     func testVelocityHelperClampsOutOfRangeAmounts() {
-        XCTAssertEqual(Theremin.velocity(pinchAmount: -0.5, onThreshold: 0.35), 127)
-        XCTAssertEqual(Theremin.velocity(pinchAmount: 1.0, onThreshold: 0.35), 40)
-        XCTAssertEqual(Theremin.velocity(pinchAmount: 0.2, onThreshold: 0), 127) // degenerate guard
+        XCTAssertEqual(Theremin.velocity(pinchAmount: -0.5, onThreshold: 0.35), 1.0, accuracy: 0.0001)
+        XCTAssertEqual(Theremin.velocity(pinchAmount: 1.0, onThreshold: 0.35), Double(40) / 127, accuracy: 0.0001)
+        XCTAssertEqual(Theremin.velocity(pinchAmount: 0.2, onThreshold: 0), 1.0, accuracy: 0.0001)
     }
 
     func testHandXMapsToPitchMonotonically() {

@@ -2,10 +2,10 @@ import Foundation
 
 public struct MIDIEvent: Equatable {
     public enum Kind: Equatable {
-        case noteOn(UInt8, velocity: UInt8)
-        case noteOff(UInt8)
-        case pitchBendSemitones(Double)   // ± bendRange around current base note
-        case cc(UInt8, UInt8)             // controller, value 0-127
+        case noteOn(note: UInt8, velocity: Double)          // velocity = final velocity 0…1
+        case noteOff(note: UInt8)
+        case perNotePitchBendSemitones(note: UInt8, Double) // bend attached to a sounding note
+        case cc(UInt8, UInt8)                               // global, 0-127
     }
     public var kind: Kind
     public var timestamp: Double
