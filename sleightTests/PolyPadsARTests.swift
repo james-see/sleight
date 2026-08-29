@@ -75,4 +75,87 @@ final class PolyPadsARTests: XCTestCase {
             XCTAssertEqual(n, expected)
         }
     }
+
+    // MARK: - Task 8: AR pads default + instrument-switch layout
+
+    /// AR pads must be on by default for PolyPads: a freshly created
+    /// AppSettings should have `arPadsEnabled == true`, and applying those
+    /// settings through a SleightController with the PolyPads instrument
+    /// selected should produce a non-nil `padLayout` on the PolyPads instance.
+    @MainActor
+    func testARPadsOnByDefaultForPolyPads() {
+        // 1. AppSettings defaults arPadsEnabled to true.
+        let settings = AppSettings()
+        XCTAssertTrue(settings.arPadsEnabled,
+            "arPadsEnabled must default to true so PolyPads shows pads out of the box")
+
+        // 2. Wire a controller with PolyPads selected and confirm applySettings
+        //    installs a non-nil pad layout derived from voiceCount.
+        settings.instrumentRaw = InstrumentType.polyPads.rawValue
+        settings.voiceCount = 4
+        let controller = SleightController()
+        // Replace the controller's settings so we control the state exactly.
+        // (SleightController owns its own AppSettings; mutate it in place.)
+        controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
+        controller.settings.voiceCount = 4
+        controller.settings.arPadsEnabled = true
+        controller.applySettings()
+
+        let inst = controller.pipeline.instrument
+        guard let polyPads = inst as? PolyPads else {
+            XCTFail("expected PolyPads instrument, got \(type(of: inst))"); return
+        }
+        XCTAssertNotNil(polyPads.padLayout, "PolyPads.padLayout must be set when arPadsEnabled is true")
+        XCTAssertEqual(polyPads.padLayout?.count, 4, "pad layout should have one pad per voice")
+        // The layout must match ARPadLayout.compute for the same voice count.
+        let expected = ARPadLayout.compute(voiceCount: 4)
+        XCTAssertEqual(polyPads.padLayout, expected,
+            "pad layout must equal ARPadLayout.compute(voiceCount: settings.voiceCount)")
+    }
+
+    /// When the user switches to the PolyPads instrument, applySettings() must
+    /// compute and install a fresh pad layout on the new PolyPads instance.
+    /// This regression-tests the instrument-switch path in applySettings().
+    @MainActor
+    func testPolyPadsGetsPadLayoutOnInstrumentSwitch() {
+        let controller = SleightController()
+        // Start from the default theremin instrument.
+        controller.settings.instrumentRaw = InstrumentType.theremin.rawValue
+        controller.settings.arPadsEnabled = true
+        controller.applySettings()
+        // Theremin is NOT a PolyPads, so no pad layout applies yet.
+        XCTAssertFalse(controller.pipeline.instrument is PolyPads,
+            "precondition: theremin should be active before the switch")
+
+        // Now switch to PolyPads — applySettings must build a new PolyPads and
+        // install a pad layout derived from the current voice count.
+        controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
+        controller.settings.voiceCount = 3
+        controller.applySettings()
+
+        guard let polyPads = controller.pipeline.instrument as? PolyPads else {
+            XCTFail("instrument should be PolyPads after switching to poly-pads"); return
+        }
+        XCTAssertNotNil(polyPads.padLayout,
+            "PolyPads must receive a pad layout on instrument switch when arPadsEnabled is true")
+        XCTAssertEqual(polyPads.padLayout?.count, 3,
+            "pad layout count must match voiceCount (3) after instrument switch")
+        XCTAssertEqual(polyPads.padLayout, ARPadLayout.compute(voiceCount: 3),
+            "installed layout must equal ARPadLayout.compute(voiceCount: 3)")
+
+        // Switching back to theremin then to PolyPads again must re-install the
+        // layout (regression: the old PolyPads instance should not be reused).
+        controller.settings.instrumentRaw = InstrumentType.theremin.rawValue
+        controller.applySettings()
+        controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
+        controller.settings.voiceCount = 2
+        controller.applySettings()
+        guard let polyPads2 = controller.pipeline.instrument as? PolyPads else {
+            XCTFail("instrument should be PolyPads after second switch"); return
+        }
+        XCTAssertEqual(polyPads2.padLayout?.count, 2,
+            "pad layout must be recomputed for voiceCount=2 after a second switch")
+        XCTAssertEqual(polyPads2.padLayout, ARPadLayout.compute(voiceCount: 2),
+            "recomputed layout must equal ARPadLayout.compute(voiceCount: 2)")
+    }
 }
