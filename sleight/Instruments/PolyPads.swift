@@ -39,6 +39,15 @@ public final class PolyPads: Instrument {
     /// normalized by palm size, exceeds this. Used for legacy extension gate.
     public var extensionThreshold: Double = 0.35
 
+    /// Press thresholds for AR pad mode (0-1). A pad fires only when the finger
+    /// is inside the pad rect AND curled (extensionRatio below pressThreshold).
+    /// It releases when the finger extends back above releaseThreshold.
+    /// The gap prevents flicker. With a flat hand (all fingers extended),
+    /// extensionRatio is high (~0.5+) so no pads fire — you must curl a
+    /// finger toward the pad to press it.
+    public var pressThreshold: Double = 0.30
+    public var releaseThreshold: Double = 0.38
+
     // MARK: State (per-pad)
     /// Which pads are currently sounding (pad index -> note). Read-only access
     /// for the overlay to highlight pressed pads.
@@ -122,21 +131,25 @@ public final class PolyPads: Instrument {
             return events
         }
 
+        let palmSize = palmSize(of: r)
         let fingerCount = min(Self.fingerTips.count, 4)  // index, middle, ring, little
 
-        // Track which pads are hit this frame (finger inside rect)
+        // Track which pads are hit this frame (finger inside rect AND curled)
         var padsHitThisFrame: Set<Int> = []
 
         for f in 0..<fingerCount {
             let tipIdx = Self.fingerTips[f]
+            let mcpIdx = Self.fingerMCPs[f]
             let tip = r.points[tipIdx]
-            guard tip.confidence > 0.5 else { continue }
+            let mcp = r.points[mcpIdx]
+            guard tip.confidence > 0.5, mcp.confidence > 0.5 else { continue }
 
+            let extensionRatio = distance(tip, mcp) / max(palmSize, 0.001)
             let tipPoint = CGPoint(x: tip.x, y: tip.y)
 
-            // Which pad is this finger inside?
+            // Which pad is this finger hovering over?
             guard let padIdx = ARPadLayout.hitTest(tipPoint, pads: layout) else {
-                // Finger not inside any pad — if it was playing one, release
+                // Finger not inside any pad — if it was pressing one, release
                 if let prevPad = fingerPadAssignment[f] {
                     if let note = activePads[prevPad] {
                         events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
@@ -147,28 +160,42 @@ public final class PolyPads: Instrument {
                 continue
             }
 
-            padsHitThisFrame.insert(padIdx)
-            let note = notes[padIdx]
-            let wasPlaying = fingerPadAssignment[f] == padIdx
+            let wasPressing = fingerPadAssignment[f] == padIdx
 
-            if !wasPlaying {
-                // Finger entered a new pad. If it was playing a different pad, release that first.
-                if let prevPad = fingerPadAssignment[f], prevPad != padIdx {
-                    if let prevNote = activePads[prevPad] {
-                        events.append(MIDIEvent(kind: .noteOff(note: prevNote, channel: 0), timestamp: t))
+            if !wasPressing {
+                // Not yet pressing this pad: check if finger curls enough to press
+                if extensionRatio < pressThreshold {
+                    // Press! Finger is inside the pad AND curled
+                    // Release any previous pad this finger was on
+                    if let prevPad = fingerPadAssignment[f], prevPad != padIdx {
+                        if let prevNote = activePads[prevPad] {
+                            events.append(MIDIEvent(kind: .noteOff(note: prevNote, channel: 0), timestamp: t))
+                        }
+                        activePads.removeValue(forKey: prevPad)
                     }
-                    activePads.removeValue(forKey: prevPad)
+                    padsHitThisFrame.insert(padIdx)
+                    let note = notes[padIdx]
+                    events.append(MIDIEvent(kind: .noteOn(note: note, velocity: 0.8, channel: 0), timestamp: t))
+                    activePads[padIdx] = note
+                    fingerPadAssignment[f] = padIdx
                 }
-                // Play the new pad
-                events.append(MIDIEvent(kind: .noteOn(note: note, velocity: 0.8, channel: 0), timestamp: t))
-                activePads[padIdx] = note
-                fingerPadAssignment[f] = padIdx
+                // else: hovering over pad but finger is extended (flat hand) — no press
+            } else {
+                // Already pressing: release if finger extends OR leaves the pad
+                if extensionRatio > releaseThreshold {
+                    // Finger extended back — release
+                    let note = notes[padIdx]
+                    events.append(MIDIEvent(kind: .noteOff(note: note, channel: 0), timestamp: t))
+                    activePads.removeValue(forKey: padIdx)
+                    fingerPadAssignment.removeValue(forKey: f)
+                } else {
+                    // Still pressing (curled + inside pad)
+                    padsHitThisFrame.insert(padIdx)
+                }
             }
-            // else: still inside the same pad, note sustains — no new events
         }
 
         // Release any active pads that no longer have a finger inside them
-        // (finger moved to a different pad or hand changed shape)
         for (padIdx, note) in activePads {
             if !padsHitThisFrame.contains(padIdx) {
                 let stillAssigned = fingerPadAssignment.values.contains(padIdx)

@@ -12,102 +12,144 @@ final class PolyPadsARTests: XCTestCase {
         pads.scale = .minorPentatonic
         pads.padLayout = ARPadLayout.compute(padCount: 12)
         pads.padNotes = ARPadLayout.padNotes(padCount: 12, scale: .minorPentatonic, root: 60, octaves: 2)
+        pads.pressThreshold = 0.30
+        pads.releaseThreshold = 0.38
     }
 
-    /// Build a right hand with a specific finger's tip at (x, y).
-    /// Other fingers are placed far from any pad.
-    private func rightHand(finger: Int, tipX: Double, tipY: Double) -> HandFrame {
+    /// Build a right hand with a specific finger's tip at (x, y) and a given
+    /// extension ratio (distance tip-to-MCP / palmSize). Low extension = curled.
+    /// The target finger's MCP is placed directly below the tip at the correct
+    /// distance to achieve the desired extension ratio.
+    private func rightHand(finger: Int, tipX: Double, tipY: Double, extensionRatio: Double) -> HandFrame {
+        // Fixed palm geometry: wrist and middleMCP are always the same,
+        // so palmSize is constant across all tests.
+        let wristY = 0.95
+        let middleMCPY = 0.85
+        let palmSize = wristY - middleMCPY  // 0.10
+
+        // Target finger's MCP: directly below tip at the right distance
+        let tipMcpDist = extensionRatio * palmSize
+        let targetMCPY = tipY + tipMcpDist  // MCP below tip (higher Y = lower on screen)
+
         var pts: [LandmarkPoint] = []
         for i in 0..<21 {
             let y: Double
             let x: Double
             switch i {
-            case 0:  y = 0.9; x = 0.5     // wrist below pad area
+            case 0:  // wrist
+                y = wristY; x = 0.5
             case 8, 12, 16, 20:  // finger tips
                 if i == finger {
                     y = tipY; x = tipX
                 } else {
-                    y = 0.9; x = 0.3  // other fingers outside pad zone
+                    // Other fingers: extended and away from pads
+                    y = middleMCPY - 0.06; x = 0.3
                 }
             case 5, 9, 13, 17:  // MCPs
-                y = 0.85; x = 0.5
+                if i == finger - 3 {  // the MCP for the target finger (tip-3 = MCP)
+                    y = targetMCPY; x = tipX
+                } else {
+                    y = middleMCPY; x = 0.5
+                }
             default:
-                y = 0.85; x = 0.5
+                y = middleMCPY; x = 0.5
             }
             pts.append(LandmarkPoint(x: x, y: y, confidence: 1.0))
         }
         return HandFrame(side: .right, points: pts, timestamp: 0)
     }
 
-    // MARK: Air-tap press detection
+    // MARK: Curl-gate press detection
 
-    func testFingerInsidePadPlaysNote() {
+    func testFlatHandOverPadDoesNotPlay() {
+        // Finger inside pad rect but extended (flat hand) — should NOT play
         guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
-        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.50)
         let evs = pads.update(hands: [hand], dt: 0.016)
         let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertEqual(noteOns.count, 1, "finger inside pad should trigger one note")
+        XCTAssertTrue(noteOns.isEmpty, "flat hand (extended) over pad should NOT trigger a note")
+    }
+
+    func testCurlFingerInsidePadPlaysNote() {
+        // Finger inside pad rect AND curled — should play
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
+        let evs = pads.update(hands: [hand], dt: 0.016)
+        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
+        XCTAssertEqual(noteOns.count, 1, "curled finger inside pad should trigger one note")
         if case .noteOn(let n, _, _) = noteOns.first!.kind {
             XCTAssertEqual(n, pads.padNotes![0], "note should match pad 0's pre-computed note")
         }
     }
 
-    func testFingerOutsidePadDoesNotPlay() {
-        let hand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5)
+    func testCurlFingerOutsidePadDoesNotPlay() {
+        // Finger curled but NOT inside any pad rect — no note
+        let hand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5, extensionRatio: 0.15)
         let evs = pads.update(hands: [hand], dt: 0.016)
         let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertTrue(noteOns.isEmpty, "finger outside any pad should not trigger a note")
+        XCTAssertTrue(noteOns.isEmpty, "curled finger outside any pad should not trigger a note")
+    }
+
+    func testExtendingFingerReleasesNote() {
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        // Press: curled inside pad
+        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
+        _ = pads.update(hands: [pressHand], dt: 0.016)
+        // Release: extend finger (still inside pad, but now flat)
+        let releaseHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.50)
+        let evs = pads.update(hands: [releaseHand], dt: 0.016)
+        let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
+        XCTAssertFalse(noteOffs.isEmpty, "extending finger should release the note")
     }
 
     func testFingerLeavingPadSendsNoteOff() {
         guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
-        // First tick: finger inside pad
-        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
         _ = pads.update(hands: [pressHand], dt: 0.016)
-
-        // Second tick: finger moves outside pad
-        let releaseHand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5)
+        // Move finger outside pad (still curled)
+        let releaseHand = rightHand(finger: 8, tipX: 0.3, tipY: 0.5, extensionRatio: 0.15)
         let evs = pads.update(hands: [releaseHand], dt: 0.016)
         let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
         XCTAssertFalse(noteOffs.isEmpty, "finger leaving pad should send note-off")
     }
 
-    func testFingerStayingInPadDoesNotRetrigger() {
+    func testStayingCurledInPadDoesNotRetrigger() {
         guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
-        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let hand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
         _ = pads.update(hands: [hand], dt: 0.016)
-
-        // Second tick: same position — should NOT produce another noteOn
         let evs2 = pads.update(hands: [hand], dt: 0.016)
         let noteOns = evs2.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertTrue(noteOns.isEmpty, "staying in same pad should not re-trigger note")
+        XCTAssertTrue(noteOns.isEmpty, "staying curled in same pad should not re-trigger note")
     }
 
     func testHandLostSendsAllNoteOffs() {
         guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
-        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
+        let pressHand = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
         _ = pads.update(hands: [pressHand], dt: 0.016)
-
         let evs = pads.update(hands: [], dt: 0.016)
         let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
         XCTAssertEqual(noteOffs.count, 1, "hand lost should send one note-off")
     }
 
-    func testTwoFingersPlayTwoPads() {
+    func testTwoCurlFingersPlayTwoPads() {
         guard pads.padLayout!.count >= 2 else { XCTFail("need 2 pads"); return }
         let pad0 = pads.padLayout![0]
         let pad1 = pads.padLayout![1]
+        let palmSize = 0.10
+        let tipMcpDist = 0.15 * palmSize  // curled
 
         var pts: [LandmarkPoint] = []
         for i in 0..<21 {
             let y: Double
             let x: Double
             switch i {
-            case 0: y = 0.9; x = 0.5
-            case 8:  y = Double(pad0.midY); x = Double(pad0.midX)  // index in pad 0
-            case 12: y = Double(pad1.midY); x = Double(pad1.midX) // middle in pad 1
-            case 16, 20: y = 0.9; x = 0.3  // other fingers away
-            case 5, 9, 13, 17: y = 0.85; x = 0.5
+            case 0: y = 0.95; x = 0.5
+            case 8:  y = Double(pad0.midY); x = Double(pad0.midX)
+            case 12: y = Double(pad1.midY); x = Double(pad1.midX)
+            case 5:  y = Double(pad0.midY) + tipMcpDist; x = Double(pad0.midX)  // index MCP
+            case 9:  y = Double(pad1.midY) + tipMcpDist; x = Double(pad1.midX)  // middle MCP
+            case 13, 17: y = 0.85; x = 0.5  // other MCPs (not used)
+            case 16, 20: y = 0.85 - 0.06; x = 0.3  // other fingers away
             default: y = 0.85; x = 0.5
             }
             pts.append(LandmarkPoint(x: x, y: y, confidence: 1.0))
@@ -115,25 +157,7 @@ final class PolyPadsARTests: XCTestCase {
         let hand = HandFrame(side: .right, points: pts, timestamp: 0)
         let evs = pads.update(hands: [hand], dt: 0.016)
         let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertEqual(noteOns.count, 2, "two fingers in two pads should play two notes")
-    }
-
-    func testFingerMovingBetweenPadsReleasesFirst() {
-        guard pads.padLayout!.count >= 2 else { XCTFail("need 2 pads"); return }
-        let pad0 = pads.padLayout![0]
-        let pad1 = pads.padLayout![1]
-
-        // Press pad 0
-        let hand0 = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY))
-        _ = pads.update(hands: [hand0], dt: 0.016)
-
-        // Move finger to pad 1
-        let hand1 = rightHand(finger: 8, tipX: Double(pad1.midX), tipY: Double(pad1.midY))
-        let evs = pads.update(hands: [hand1], dt: 0.016)
-        let noteOffs = evs.filter { if case .noteOff = $0.kind { return true } else { return false } }
-        let noteOns = evs.filter { if case .noteOn = $0.kind { return true } else { return false } }
-        XCTAssertFalse(noteOffs.isEmpty, "moving to a new pad should release the old note")
-        XCTAssertFalse(noteOns.isEmpty, "moving to a new pad should trigger the new note")
+        XCTAssertEqual(noteOns.count, 2, "two curled fingers in two pads should play two notes")
     }
 
     // MARK: Legacy extension mode (no pads)
@@ -142,7 +166,6 @@ final class PolyPadsARTests: XCTestCase {
         pads.padLayout = nil
         pads.padNotes = nil
         pads.voiceCount = 4
-        // Extended finger should produce a note (legacy mode)
         var pts: [LandmarkPoint] = []
         for i in 0..<21 {
             let y: Double
