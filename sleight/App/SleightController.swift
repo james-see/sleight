@@ -61,8 +61,21 @@ final class SleightController: ObservableObject {
         inst.bendRangeSemitones = settings.bendRange
         if let pads = inst as? PolyPads {
             pads.voiceCount = settings.voiceCount
-            pads.padLayout = settings.arPadsEnabled
-                ? ARPadLayout.compute(voiceCount: settings.voiceCount) : nil
+            pads.padCount = settings.padCount
+            if settings.arPadsEnabled {
+                let layout = ARPadLayout.compute(padCount: settings.padCount)
+                let notes = ARPadLayout.padNotes(
+                    padCount: settings.padCount,
+                    scale: settings.scale,
+                    root: settings.root,
+                    octaves: settings.octaves
+                )
+                pads.padLayout = layout
+                pads.padNotes = notes
+            } else {
+                pads.padLayout = nil
+                pads.padNotes = nil
+            }
         }
         pipeline.practiceMode = settings.practice
         let autoMute = settings.autoMuteWhenHostConnected && hostWatcher.hostConnected

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum Scale: String, Codable, CaseIterable, Identifiable {
-    case chromatic, major, minorPentatonic, free
+    case chromatic, major, minor, minorPentatonic, free
 
     public var id: String { rawValue }
 
@@ -9,6 +9,7 @@ public enum Scale: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .chromatic: return Array(0...11)
         case .major: return [0, 2, 4, 5, 7, 9, 11]
+        case .minor: return [0, 2, 3, 5, 7, 8, 10]
         case .minorPentatonic: return [0, 3, 5, 7, 10]
         case .free: return []
         }

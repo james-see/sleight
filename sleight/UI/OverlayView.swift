@@ -51,9 +51,6 @@ struct OverlayView: View {
             }
 
             // --- skeletons: proper finger chains, not one big polyline ---
-            // Landmark order is wrist; thumb 1-4; index 5-8; middle 9-12;
-            // ring 13-16; little 17-20. Connecting 0→1→…→20 in index order
-            // draws a zigzag web across the hand.
             let chains: [[Int]] = [
                 [0, 1, 2, 3, 4],          // thumb
                 [0, 5, 6, 7, 8],          // index
@@ -79,38 +76,48 @@ struct OverlayView: View {
                 }
             }
 
-            // --- AR pads: perspective-styled rectangles with hit highlight ---
+            // --- AR pads: note labels, hover vs press highlighting ---
             if let pads = overlay.arPads {
-                for (i, pad) in pads.enumerated() {
-                    let isHit = overlay.arPadHits.contains(i)
+                let padNotes = overlay.arPadNotes ?? []
+                let pressed = overlay.arPadsPressed
+                let hovered = overlay.arPadHits
 
-                    // Perspective: pads lower on screen (higher Y) appear closer,
-                    // so shrink them slightly toward the top for a subtle depth cue.
-                    let shrinkY = 0.88 + 0.12 * (1 - pad.midY)
-                    let shrinkX = 0.92 + 0.08 * (1 - pad.midY)
-                    let w = pad.width * shrinkX
-                    let h = pad.height * shrinkY
-                    let cx = pad.midX
-                    let cy = pad.midY
+                for (i, pad) in pads.enumerated() {
+                    let isPressed = pressed.contains(i)
+                    let isHovered = hovered.contains(i) && !isPressed
+
                     let drawRect = CGRect(
-                        x: (cx - w / 2) * size.width,
-                        y: (cy - h / 2) * size.height,
-                        width: w * size.width,
-                        height: h * size.height
+                        x: pad.minX * size.width,
+                        y: pad.minY * size.height,
+                        width: pad.width * size.width,
+                        height: pad.height * size.height
                     )
 
-                    let fillOpacity: Double = isHit ? 0.45 : 0.15
-                    let strokeOpacity: Double = isHit ? 1.0 : 0.4
-                    let lineWidth: CGFloat = isHit ? 3 : 1.5
+                    // Fill: pressed = bright, hovered = medium, idle = dim
+                    let fillOpacity: Double = isPressed ? 0.45 : (isHovered ? 0.22 : 0.10)
+                    let strokeOpacity: Double = isPressed ? 1.0 : (isHovered ? 0.6 : 0.3)
+                    let lineWidth: CGFloat = isPressed ? 3 : 1.5
+                    let borderColor: Color = isPressed ? .white : blue
 
                     ctx.fill(Path(drawRect), with: .color(blue.opacity(fillOpacity)))
-                    ctx.stroke(Path(drawRect), with: .color(blue.opacity(strokeOpacity)), lineWidth: lineWidth)
+                    ctx.stroke(Path(drawRect), with: .color(borderColor.opacity(strokeOpacity)), lineWidth: lineWidth)
 
-                    // Pad number label
-                    let label = Text("\(i + 1)")
-                        .font(.system(size: 18, weight: .bold, design: .monospaced))
-                        .foregroundColor(isHit ? .white : blue.opacity(0.7))
-                    ctx.draw(label, at: CGPoint(x: drawRect.midX, y: drawRect.midY))
+                    // Note name label
+                    let noteName: String
+                    if i < padNotes.count {
+                        noteName = MusicTheory.noteName(Int(padNotes[i]))
+                    } else {
+                        noteName = "\(i + 1)"
+                    }
+
+                    let labelColor: Color = isPressed ? .white : (isHovered ? .white.opacity(0.9) : blue.opacity(0.6))
+                    let fontSize: CGFloat = isPressed ? 16 : 13
+                    ctx.draw(
+                        Text(noteName)
+                            .font(.system(size: fontSize, weight: .bold, design: .monospaced))
+                            .foregroundColor(labelColor),
+                        at: CGPoint(x: drawRect.midX, y: drawRect.midY)
+                    )
                 }
             }
 
@@ -121,7 +128,6 @@ struct OverlayView: View {
                 let index = pts[Landmark.indexTip]
                 let mid = CGPoint(x: (thumb.x + index.x) / 2 * size.width,
                                   y: (thumb.y + index.y) / 2 * size.height)
-                // ring radius closes as pinch amount → 0; fill when active
                 let closeness = min(max(1 - amount, 0), 1)
                 let radius: CGFloat = 14 + 18 * CGFloat(1 - closeness)
                 let ringRect = CGRect(x: mid.x - radius, y: mid.y - radius, width: radius * 2, height: radius * 2)
