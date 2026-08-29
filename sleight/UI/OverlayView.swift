@@ -79,6 +79,41 @@ struct OverlayView: View {
                 }
             }
 
+            // --- AR pads: perspective-styled rectangles with hit highlight ---
+            if let pads = overlay.arPads {
+                for (i, pad) in pads.enumerated() {
+                    let isHit = overlay.arPadHits.contains(i)
+
+                    // Perspective: pads lower on screen (higher Y) appear closer,
+                    // so shrink them slightly toward the top for a subtle depth cue.
+                    let shrinkY = 0.88 + 0.12 * (1 - pad.midY)
+                    let shrinkX = 0.92 + 0.08 * (1 - pad.midY)
+                    let w = pad.width * shrinkX
+                    let h = pad.height * shrinkY
+                    let cx = pad.midX
+                    let cy = pad.midY
+                    let drawRect = CGRect(
+                        x: (cx - w / 2) * size.width,
+                        y: (cy - h / 2) * size.height,
+                        width: w * size.width,
+                        height: h * size.height
+                    )
+
+                    let fillOpacity: Double = isHit ? 0.45 : 0.15
+                    let strokeOpacity: Double = isHit ? 1.0 : 0.4
+                    let lineWidth: CGFloat = isHit ? 3 : 1.5
+
+                    ctx.fill(Path(drawRect), with: .color(blue.opacity(fillOpacity)))
+                    ctx.stroke(Path(drawRect), with: .color(blue.opacity(strokeOpacity)), lineWidth: lineWidth)
+
+                    // Pad number label
+                    let label = Text("\(i + 1)")
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .foregroundColor(isHit ? .white : blue.opacity(0.7))
+                    ctx.draw(label, at: CGPoint(x: drawRect.midX, y: drawRect.midY))
+                }
+            }
+
             // --- pinch ring at thumb-index midpoint (right hand) ---
             if let pts = overlay.skeleton[.right], pts.count > Landmark.indexTip,
                let amount = overlay.pinchAmount {
