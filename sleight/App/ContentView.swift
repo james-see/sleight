@@ -188,6 +188,31 @@ struct SettingsSheet: View {
                 }
             }
 
+            GroupBox("AR Pads") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Show AR pad targets (Poly Pads)", isOn: Binding(
+                        get: { controller.settings.arPadsEnabled },
+                        set: { controller.settings.arPadsEnabled = $0; controller.applySettings() }))
+                    Text("Overlays augmented-reality pad targets in the camera view when the Poly Pads instrument is active.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            GroupBox("Audio") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Mute Sleight's synth output", isOn: Binding(
+                        get: { controller.settings.muteSleight },
+                        set: { controller.settings.muteSleight = $0; controller.applySettings() }))
+                    Toggle("Auto-mute when a DAW host connects", isOn: Binding(
+                        get: { controller.settings.autoMuteWhenHostConnected },
+                        set: { controller.settings.autoMuteWhenHostConnected = $0; controller.applySettings() }))
+                    Text("When a DAW host connects via the audio/MIDI plug-in, Sleight's built-in synth is silenced so the DAW's instrument is the only voice heard.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             HStack {
                 Spacer()
                 Button("Done") { dismiss() }
