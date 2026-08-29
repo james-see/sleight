@@ -121,6 +121,7 @@ Practice mode is on.
 - v2 ✅: MIDI 2.0 / MPE / MIDI 1.1 output (per-note pitch bend, 32-bit), glide mode
 - v2.1 ✅: per-finger polyphony (2–4 simultaneous MPE notes via Poly Pads)
 - v2.2 ✅: floating AR pad overlays + auto-mute synth when DAW connected
+- v2.3 ✅: 12 AR pads with note labels + finger-curl press gate + minor scale
 - v3: ESP32 wireless-glove mode (IMU-fused tracking for away-from-desk play), AUv3 plugin, ribbon instrument
 
 ## License
