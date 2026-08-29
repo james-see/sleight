@@ -9,7 +9,8 @@ final class SleightController: ObservableObject {
     let settings = AppSettings()
     private(set) var capture = CaptureService()
     private(set) var pipeline: Pipeline!
-    private let synth = TestSynth()
+    let synth = TestSynth()
+    let hostWatcher = MIDIHostWatcher()
     private var started = false
     private var cancellables = Set<AnyCancellable>()
 
@@ -18,7 +19,7 @@ final class SleightController: ObservableObject {
     @Published private(set) var midiConfigFailed = false
 
     init() {
-        pipeline = Pipeline(model: model)
+        pipeline = Pipeline(model: model, settings: settings)
         capture.onFrame = { [weak self] pb in
             self?.pipeline.process(pixelBuffer: pb)
         }
@@ -28,6 +29,12 @@ final class SleightController: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
         applySettings()
+        // Start MIDI host detection: auto-mute synth when a DAW is connected.
+        hostWatcher.startMonitoring()
+        hostWatcher.$hostConnected
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.applySettings() }
+            .store(in: &cancellables)
         // Route instrument events to the test synth via a lightweight tap:
         // Pipeline sends MIDI itself; the synth listens to the same events by
         // observing the published overlay (note state) is too coarse, so we
@@ -54,9 +61,12 @@ final class SleightController: ObservableObject {
         inst.bendRangeSemitones = settings.bendRange
         if let pads = inst as? PolyPads {
             pads.voiceCount = settings.voiceCount
+            pads.padLayout = settings.arPadsEnabled
+                ? ARPadLayout.compute(voiceCount: settings.voiceCount) : nil
         }
         pipeline.practiceMode = settings.practice
-        synth.isEnabled = !settings.practice
+        let autoMute = settings.autoMuteWhenHostConnected && hostWatcher.hostConnected
+        synth.isEnabled = !settings.practice && !settings.muteSleight && !autoMute
         inst.glideMode = settings.midiMode == .legacy ? .stepped : settings.glide
         let octaveSpan = inst.octaves * 12
         let mode = settings.midiMode
