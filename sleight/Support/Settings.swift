@@ -21,6 +21,8 @@ final class AppSettings: ObservableObject {
     @Published var practice: Bool
     @Published var midiModeRaw: String
     @Published var glideRaw: String
+    @Published var instrumentRaw: String
+    @Published var voiceCount: Int
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -39,6 +41,8 @@ final class AppSettings: ObservableObject {
         practice = d.object(forKey: "practice") as? Bool ?? false
         midiModeRaw = d.string(forKey: "midiMode") ?? MIDIMode.ump.rawValue
         glideRaw = d.string(forKey: "glide") ?? GlideMode.glide.rawValue
+        instrumentRaw = d.string(forKey: "instrument") ?? InstrumentType.theremin.rawValue
+        voiceCount = d.object(forKey: "voiceCount") as? Int ?? 4
 
         // Persist every change (fire-and-forget; UserDefaults writes are cheap).
         $scaleRaw.sink { d.set($0, forKey: "scale") }.store(in: &cancellables)
@@ -52,9 +56,12 @@ final class AppSettings: ObservableObject {
         $practice.sink { d.set($0, forKey: "practice") }.store(in: &cancellables)
         $midiModeRaw.sink { d.set($0, forKey: "midiMode") }.store(in: &cancellables)
         $glideRaw.sink { d.set($0, forKey: "glide") }.store(in: &cancellables)
+        $instrumentRaw.sink { d.set($0, forKey: "instrument") }.store(in: &cancellables)
+        $voiceCount.sink { d.set($0, forKey: "voiceCount") }.store(in: &cancellables)
     }
 
     var scale: Scale { Scale(rawValue: scaleRaw) ?? .minorPentatonic }
     var midiMode: MIDIMode { MIDIMode(rawValue: midiModeRaw) ?? .ump }
     var glide: GlideMode { GlideMode(rawValue: glideRaw) ?? .glide }
+    var instrumentType: InstrumentType { InstrumentType(rawValue: instrumentRaw) ?? .theremin }
 }

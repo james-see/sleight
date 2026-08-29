@@ -38,6 +38,13 @@ final class SleightController: ObservableObject {
     }
 
     func applySettings() {
+        // Switch instrument if needed
+        let wantedType = settings.instrumentType
+        if pipeline.instrument.id != wantedType.rawValue {
+            let newInst = InstrumentRegistry.make(wantedType)
+            pipeline.instrument = newInst
+        }
+
         let inst = pipeline.instrument
         inst.pitchBand = settings.pitchLo...max(settings.pitchLo + 0.05, settings.pitchHi)
         inst.volumeBand = settings.volLo...max(settings.volLo + 0.05, settings.volHi)
@@ -45,11 +52,15 @@ final class SleightController: ObservableObject {
         inst.root = settings.root
         inst.octaves = settings.octaves
         inst.bendRangeSemitones = settings.bendRange
+        if let pads = inst as? PolyPads {
+            pads.voiceCount = settings.voiceCount
+        }
         pipeline.practiceMode = settings.practice
         synth.isEnabled = !settings.practice
         inst.glideMode = settings.midiMode == .legacy ? .stepped : settings.glide
         let octaveSpan = inst.octaves * 12
-        let ok = pipeline.midiSource?.configure(mode: settings.midiMode,
+        let mode = settings.midiMode
+        let ok = pipeline.midiSource?.configure(mode: mode,
                                                 userBendRange: settings.bendRange,
                                                 octaveSpanSemitones: octaveSpan,
                                                 glide: inst.glideMode == .glide) ?? true
