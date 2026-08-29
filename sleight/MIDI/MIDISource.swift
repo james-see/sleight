@@ -70,7 +70,8 @@ public final class MIDISource {
     /// Send a batch of events, timestamped now.
     public func send(_ events: [MIDIEvent]) {
         guard source != 0, !events.isEmpty else { return }
-        transmit(events.map { encoder.encode($0) })
+        let chunks = events.map { encoder.encode($0) }
+        transmit(chunks)
     }
 
     @discardableResult
@@ -114,9 +115,10 @@ public final class MIDISource {
                 base[4] = UInt32(chunk.count)                // packet.wordCount
                 for (i, word) in chunk.enumerated() { base[5 + i] = word }
                 let list = raw.baseAddress!.assumingMemoryBound(to: MIDIEventList.self)
-                return MIDIReceivedEventList(source, list) == noErr
+                let status = MIDIReceivedEventList(source, list)
+                return status == noErr
             }
-            if !ok { break }  // transient CoreMIDI failure; drop the rest of the batch
+            if !ok { break }
         }
     }
 }
