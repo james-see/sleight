@@ -22,7 +22,11 @@ final class AppSettings: ObservableObject {
     @Published var midiModeRaw: String
     @Published var glideRaw: String
     @Published var instrumentRaw: String
+    @Published var muteSleight: Bool
     @Published var voiceCount: Int
+    @Published var arButtonEnabled: Bool
+    @Published var arButtonNote: Int
+    @Published var arPadsEnabled: Bool
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -44,7 +48,10 @@ final class AppSettings: ObservableObject {
         instrumentRaw = d.string(forKey: "instrument") ?? InstrumentType.theremin.rawValue
         voiceCount = d.object(forKey: "voiceCount") as? Int ?? 4
 
-        // Persist every change (fire-and-forget; UserDefaults writes are cheap).
+        muteSleight = d.object(forKey: "muteSleight") as? Bool ?? false
+        arButtonEnabled = d.object(forKey: "arButtonEnabled") as? Bool ?? false
+        arButtonNote = d.object(forKey: "arButtonNote") as? Int ?? 60
+        arPadsEnabled = d.object(forKey: "arPadsEnabled") as? Bool ?? true
         $scaleRaw.sink { d.set($0, forKey: "scale") }.store(in: &cancellables)
         $root.sink { d.set($0, forKey: "root") }.store(in: &cancellables)
         $octaves.sink { d.set($0, forKey: "octaves") }.store(in: &cancellables)
@@ -57,7 +64,14 @@ final class AppSettings: ObservableObject {
         $midiModeRaw.sink { d.set($0, forKey: "midiMode") }.store(in: &cancellables)
         $glideRaw.sink { d.set($0, forKey: "glide") }.store(in: &cancellables)
         $instrumentRaw.sink { d.set($0, forKey: "instrument") }.store(in: &cancellables)
-        $voiceCount.sink { d.set($0, forKey: "voiceCount") }.store(in: &cancellables)
+        $arButtonEnabled.sink { d.set($0, forKey: "arButtonEnabled") }.store(in: &cancellables)
+        $arButtonNote.sink { d.set($0, forKey: "arButtonNote") }.store(in: &cancellables)
+        // $arButtonX.sink { d.set($0, forKey: "arButtonX") }.store(in: &cancellables)
+        // $arButtonY.sink { d.set($0, forKey: "arButtonY") }.store(in: &cancellables)
+        // $arButtonW.sink { d.set($0, forKey: "arButtonW") }.store(in: &cancellables)
+        $muteSleight.sink { d.set($0, forKey: "muteSleight") }.store(in: &cancellables)
+        $arPadsEnabled.sink { d.set($0, forKey: "arPadsEnabled") }.store(in: &cancellables)
+
     }
 
     var scale: Scale { Scale(rawValue: scaleRaw) ?? .minorPentatonic }

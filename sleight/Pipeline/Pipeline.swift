@@ -14,7 +14,10 @@ struct OverlayState {
     var fps: Double = 0
     var droppedFrames: Int = 0
     var trackingActive = false
-    var vibratoActive = false
+    var arButtonRect: CGRect?
+    var arButtonPressed: Bool = false
+    var arPads: [CGRect]?
+    var arPadHits: Set<Int> = []
 }
 
 enum DropPolicy {
@@ -61,10 +64,21 @@ final class Pipeline {
     private var droppedFrames = 0
     private var justDropped = false
 
-    init(model: PipelineModel, tracker: HandTracker = VisionHandTracker(), instrument: any Instrument = Theremin()) {
+    // Settings reference – used for AR‑button enable/disable and note choice.
+    private let settings: AppSettings
+
+    /// Finger-tip landmark indices for PolyPads voices: index/middle/ring/little.
+    private static let polyFingerTips = [8, 12, 16, 20]
+    private static func fingerTipIndex(_ v: Int) -> Int {
+        polyFingerTips[min(v, polyFingerTips.count - 1)]
+    }
+    private static let fingerTipsCount = polyFingerTips.count
+
+    init(model: PipelineModel, tracker: HandTracker = VisionHandTracker(), instrument: any Instrument = Theremin(), settings: AppSettings) {
         self.model = model
         self.tracker = tracker
         self.instrument = instrument
+        self.settings = settings
         self.midiSource = MIDISource.shared
     }
 
@@ -149,6 +163,26 @@ final class Pipeline {
             fpsWindowStart = now
         }
 
+        // AR pad layout: only when enabled and instrument is polyPads.
+        let arPadLayout: [CGRect]
+        if settings.arPadsEnabled, settings.instrumentType == .polyPads {
+            arPadLayout = ARPadLayout.compute(voiceCount: settings.voiceCount)
+        } else {
+            arPadLayout = []
+        }
+
+        // Hit-test finger tips against pads.
+        var arPadHits: Set<Int> = []
+        if !arPadLayout.isEmpty, let r = right {
+            for v in 0..<min(settings.voiceCount, Self.fingerTipsCount) {
+                let tipIdx = Self.fingerTipIndex(v)
+                let pt = CGPoint(x: r.points[tipIdx].x, y: r.points[tipIdx].y)
+                if let hit = ARPadLayout.hitTest(pt, pads: arPadLayout) {
+                    arPadHits.insert(hit)
+                }
+            }
+        }
+
         let state = OverlayState(
             skeleton: skel,
             pitchX: pitchX,
@@ -160,7 +194,15 @@ final class Pipeline {
             fps: fps,
             droppedFrames: droppedFrames,
             trackingActive: !hands.isEmpty,
-            vibratoActive: inst.vibratoActive
+            arButtonRect: settings.arButtonEnabled ? CGRect(x: 0.8, y: 0.8, width: 0.1, height: 0.1) : nil,
+            arButtonPressed: {
+                guard let right = right else { return false }
+                let tip = CGPoint(x: right.points[Landmark.indexTip].x, y: right.points[Landmark.indexTip].y)
+                let rect = CGRect(x: 0.8, y: 0.8, width: 0.1, height: 0.1)
+                return rect.contains(tip)
+            }(),
+            arPads: arPadLayout.isEmpty ? nil : arPadLayout,
+            arPadHits: arPadHits
         )
         if synchronous {
             MainActor.assumeIsolated {
