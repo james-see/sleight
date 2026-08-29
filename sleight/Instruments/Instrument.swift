@@ -23,5 +23,5 @@ public protocol Instrument: AnyObject {
 }
 
 public struct InstrumentRegistry {
-    public static let v1: [any Instrument.Type] = [Theremin.self]
+    public static let v1: [any Instrument.Type] = [Theremin.self, PolyPads.self]
 }
