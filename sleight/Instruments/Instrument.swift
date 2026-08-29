@@ -18,10 +18,38 @@ public struct MIDIEvent: Equatable {
 public protocol Instrument: AnyObject {
     var id: String { get }
     var displayName: String { get }
+    var pitchBand: ClosedRange<Double> { get set }
+    var volumeBand: ClosedRange<Double> { get set }
+    var scale: Scale { get set }
+    var root: Int { get set }
+    var octaves: Double { get set }
     /// Consume one pipeline tick; return the MIDI events for this tick.
     func update(hands: [HandFrame], dt: Double) -> [MIDIEvent]
 }
 
+/// Overlay state defaults — instruments that expose live state override these.
+public extension Instrument {
+    var isGateOpen: Bool { false }
+    var currentPitch: Double { 60 }
+    var vibratoActive: Bool { false }
+    var lastPinchAmount: Double { 1.0 }
+    var lastVolume: UInt8 { 0 }
+    var bendRangeSemitones: Double { get { 2 } set {} }
+    var glideMode: GlideMode { get { .glide } set {} }
+}
+
+public enum InstrumentType: String, CaseIterable, Identifiable {
+    case theremin = "theremin"
+    case polyPads = "poly-pads"
+    public var id: String { rawValue }
+}
+
 public struct InstrumentRegistry {
     public static let v1: [any Instrument.Type] = [Theremin.self, PolyPads.self]
+    public static func make(_ type: InstrumentType) -> any Instrument {
+        switch type {
+        case .theremin: return Theremin()
+        case .polyPads: return PolyPads()
+        }
+    }
 }

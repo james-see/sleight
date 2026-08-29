@@ -45,7 +45,7 @@ final class FilterBox {
 final class Pipeline {
     let model: PipelineModel
     var midiSource: MIDISource?
-    let instrument: Theremin
+    var instrument: any Instrument
     /// Mirror of the UI practice toggle (plain flag: read from the capture queue).
     var practiceMode = false
     /// Observer hook (test synth listens here).
@@ -61,7 +61,7 @@ final class Pipeline {
     private var droppedFrames = 0
     private var justDropped = false
 
-    init(model: PipelineModel, tracker: HandTracker = VisionHandTracker(), instrument: Theremin = Theremin()) {
+    init(model: PipelineModel, tracker: HandTracker = VisionHandTracker(), instrument: any Instrument = Theremin()) {
         self.model = model
         self.tracker = tracker
         self.instrument = instrument
