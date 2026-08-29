@@ -27,6 +27,7 @@ final class AppSettings: ObservableObject {
     @Published var arButtonEnabled: Bool
     @Published var arButtonNote: Int
     @Published var arPadsEnabled: Bool
+    @Published var autoMuteWhenHostConnected: Bool
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -52,6 +53,7 @@ final class AppSettings: ObservableObject {
         arButtonEnabled = d.object(forKey: "arButtonEnabled") as? Bool ?? false
         arButtonNote = d.object(forKey: "arButtonNote") as? Int ?? 60
         arPadsEnabled = d.object(forKey: "arPadsEnabled") as? Bool ?? true
+        autoMuteWhenHostConnected = d.object(forKey: "autoMuteWhenHostConnected") as? Bool ?? true
         $scaleRaw.sink { d.set($0, forKey: "scale") }.store(in: &cancellables)
         $root.sink { d.set($0, forKey: "root") }.store(in: &cancellables)
         $octaves.sink { d.set($0, forKey: "octaves") }.store(in: &cancellables)
@@ -71,6 +73,7 @@ final class AppSettings: ObservableObject {
         // $arButtonW.sink { d.set($0, forKey: "arButtonW") }.store(in: &cancellables)
         $muteSleight.sink { d.set($0, forKey: "muteSleight") }.store(in: &cancellables)
         $arPadsEnabled.sink { d.set($0, forKey: "arPadsEnabled") }.store(in: &cancellables)
+        $autoMuteWhenHostConnected.sink { d.set($0, forKey: "autoMuteWhenHostConnected") }.store(in: &cancellables)
 
     }
 
