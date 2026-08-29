@@ -4,16 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sleight: play MIDI with your hands</title>
-<meta name="description" content="Sleight turns your webcam into a theremin. Two hands, one camera, any DAW. Free and open source for macOS.">
+<meta name="description" content="Sleight turns your webcam into a MIDI instrument. Hand tracking, AR pads, polyphony. Free and open source for macOS.">
 <link rel="canonical" href="https://sleightapp.xyz/">
 <link rel="icon" type="image/png" href="icon.png">
 <meta property="og:title" content="Sleight: play MIDI with your hands">
-<meta property="og:description" content="Your webcam is the instrument. Two bare hands, one camera, any DAW. Free and open source for macOS.">
-<meta property="og:image" content="https://sleightapp.xyz/og.jpg">
+<meta property="og:description" content="Your webcam is the instrument. Hand tracking, 12 AR pads, polyphony, any DAW. Free and open source for macOS.">
+<meta property="og:image" content="https://sleightapp.xyz/sleight-promo.jpg">
 <meta property="og:url" content="https://sleightapp.xyz/">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://sleightapp.xyz/og.jpg">
+<meta name="twitter:image" content="https://sleightapp.xyz/sleight-promo.jpg">
 <meta name="theme-color" content="#0A0B0D">
 <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
 <style>
@@ -106,7 +106,7 @@
   .feat-shot img { display: block; width: 100%; height: auto; }
   .checklist { list-style: none; margin-top: 18px; }
   .checklist li { color: var(--text-dim); font-size: 14.5px; padding: 7px 0; display: flex; gap: 10px; }
-  .checklist li::before { content: "→"; color: var(--accent); font-weight: 700; }
+  .checklist li::before { content: "\2192"; color: var(--accent); font-weight: 700; }
 
   /* download */
   .dl-card {
@@ -145,6 +145,7 @@
     <a class="brand" href="/"><img src="icon.png" alt=""> Sleight</a>
     <div class="navlinks">
       <a href="#gestures">How it plays</a>
+      <a href="#pads">AR Pads</a>
       <a href="https://github.com/james-see/sleight">GitHub</a>
       <a class="cta" href="#download">Download</a>
     </div>
@@ -155,58 +156,59 @@
   <div class="wrap">
     <div>
       <h1>Play MIDI<br>with your <em>bare hands</em>.</h1>
-      <p class="sub">Turn any Mac webcam into a theremin: one hand picks pitch, the other rides volume, a pinch plays the note.</p>
+      <p class="sub">Your webcam becomes a MIDI instrument. Theremin mode for expressive single-note play, or Poly Pads with 12 floating AR keys and finger-curl detection for polyphony. No gloves, no sensors.</p>
       <div class="cta-row">
         <a class="btn-primary" href="https://github.com/james-see/sleight/releases/latest">Download for Mac</a>
         <a class="btn-ghost" href="https://github.com/james-see/sleight">View source ↗</a>
       </div>
-      <p class="meta-line">Free and open source. Notarized. macOS 14+, Apple Silicon.</p>
+      <p class="meta-line">Free and open source. Signed and notarized. macOS 14+, Apple Silicon.</p>
     </div>
     <div class="hero-art">
-      <img src="hero.jpg" alt="Two hands playing an invisible instrument, traced by glowing wireframe skeleton lines" width="1600" height="1018">
+      <img src="sleight-promo.jpg" alt="Sleight app showing 12 AR pad overlays with note labels over the live camera view" width="2880" height="1800">
     </div>
   </div>
 </header>
 
 <section id="gestures">
   <div class="wrap">
-    <h2>Four gestures, one instrument</h2>
+    <h2>Two instruments, one camera</h2>
     <p class="lede">No gloves, no rings, no hardware between you and the sound. Sleight publishes a standard CoreMIDI source named <strong>Sleight</strong>, so it plugs into Logic, Ableton, MainStage, or anything else that speaks MIDI.</p>
     <div class="gesture-grid">
       <div class="gesture">
         <i class="ph ph-hand-waving"></i>
-        <h3>Right hand: pitch</h3>
-        <p>Move your hand across the frame to slide along a two-octave scale. Pitch bends continuously, like a real theremin's finger.</p>
+        <h3>Theremin: right hand pitch</h3>
+        <p>Move your hand horizontally to slide along a two-octave scale. Pitch bends continuously. Left hand controls volume, pinch plays the note.</p>
       </div>
       <div class="gesture">
-        <i class="ph ph-arrows-out-line-vertical"></i>
-        <h3>Left hand: volume</h3>
-        <p>Raise it toward the top of the frame and the sound swells. Drop it and the instrument fades to silence.</p>
+        <i class="ph ph-squares-four"></i>
+        <h3>Poly Pads: 12 AR keys</h3>
+        <p>Floating pads appear over your camera view with note labels. Hover a pad, curl your finger to press it. Play up to 4 notes at once across index, middle, ring, and little fingers.</p>
       </div>
       <div class="gesture">
-        <i class="ph ph-hand-pinching"></i>
-        <h3>Pinch: play</h3>
-        <p>Touch thumb to index finger to open a note; let go to release. The tighter you snap, the harder it hits.</p>
+        <i class="ph ph-speaker-simple-slash"></i>
+        <h3>Auto-mute when DAW connected</h3>
+        <p>When Logic or any DAW is open, Sleight's built-in synth silences itself automatically. MIDI keeps flowing. You hear only your DAW's instruments.</p>
       </div>
       <div class="gesture">
         <i class="ph ph-waveform"></i>
-        <h3>Feel, out of the box</h3>
-        <p>Vibrato, a minor pentatonic default scale, and velocity from pinch tightness. It sounds musical even when you improvise.</p>
+        <h3>Musical out of the box</h3>
+        <p>Minor pentatonic, major, minor, chromatic, or free scale. Vibrato via hand oscillation. Velocity from pinch tightness. It sounds musical even when you improvise.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section>
+<section id="pads">
   <div class="wrap">
     <div class="feat-row">
       <div>
-        <h2>Runs entirely on your Mac</h2>
-        <p>Apple's Vision framework does the hand tracking on the Neural Engine at display frame rates. A One-Euro filter smooths the control signals so pitch glides instead of jittering. Nothing leaves your machine: no account, no cloud, no telemetry.</p>
+        <h2>AR pad overlay</h2>
+        <p>When Poly Pads is selected, 12 semi-transparent pads float over the camera preview in a grid. Each pad shows its note name (C4, Eb4, F4, etc.) computed from your chosen scale, root, and octave. Pads highlight blue when hovered and brighten when pressed. Adjustable from 4 to 16 pads.</p>
         <ul class="checklist">
-          <li>60 fps camera pipeline with late-frame dropping</li>
-          <li>Sub-frame tracking latency, smoothed control curve</li>
-          <li>Camera permission asked once, used only in-app</li>
+          <li>Finger-curl press detection: pads only fire when your finger is bent</li>
+          <li>Note labels on every pad, computed from your scale and root</li>
+          <li>Perspective styling suggests depth in the camera view</li>
+          <li>Hysteresis prevents flicker between press and release</li>
         </ul>
       </div>
       <div class="feat-shot">
@@ -216,13 +218,12 @@
     <div class="feat-row">
       <div>
         <h2>Made for Logic, at home anywhere</h2>
-        <p>Sleight shows up in your DAW as a plain MIDI input. Route it to a synth in Logic, a pad in Ableton, or your own instrument. Poly Pads mode displays 12 floating AR key overlays on the camera — curl a finger into a pad to play its note. Auto-mute silences the built-in synth when a DAW is connected, so you hear Logic's instruments only. Practice mode keeps MIDI silent while you learn the gestures.</p>
+        <p>Sleight shows up in your DAW as a plain MIDI input. Route it to a synth in Logic, a pad in Ableton, or your own instrument. Supports MIDI 2.0 (UMP) with 16-bit velocity and 32-bit per-note pitch bend, MPE with per-channel expression, or classic MIDI 1.1. Practice mode keeps MIDI silent while you learn the gestures.</p>
         <ul class="checklist">
           <li>Standard CoreMIDI virtual source, no drivers</li>
-          <li>Pitch bend and CC7 volume, mapped the way synth players expect</li>
-          <li>12 AR pads with note labels, finger-curl press detection</li>
+          <li>MIDI 2.0 / MPE / MIDI 1.1 protocol switchable in Settings</li>
           <li>Auto-mute synth when Logic or any DAW is connected</li>
-          <li>Set your own scale, root note, and bend range in Settings</li>
+          <li>Set your own scale, root note, octave range, and bend range</li>
         </ul>
       </div>
       <div class="feat-shot">
@@ -236,7 +237,7 @@
   <div class="wrap">
     <div class="dl-card">
       <div>
-        <h2>Grab the first release</h2>
+        <h2>Download Sleight v2.3</h2>
         <p>Download the disk image, drag Sleight to Applications, and raise a hand. Signed and notarized, so Gatekeeper stays happy.</p>
       </div>
       <div class="cta-row">
