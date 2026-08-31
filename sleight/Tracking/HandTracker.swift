@@ -9,6 +9,9 @@ public protocol HandTracker: AnyObject {
 
 public final class VisionHandTracker: HandTracker {
     private let request: VNDetectHumanHandPoseRequest
+    /// Last good-or-held points per side, used when a landmark drops below
+    /// confidence so the joint holds still instead of snapping to a neighbor.
+    private var lastPoints: [HandSide: [LandmarkPoint]] = [:]
 
     /// Explicit Vision joint → our 0-20 index mapping (matches Types.swift order).
     private static let jointIndex: [VNHumanHandPoseObservation.JointName: Int] = [
@@ -46,7 +49,9 @@ public final class VisionHandTracker: HandTracker {
                 }
             }
             guard let wristX = pts[Landmark.wrist]?.x, let side = Self.assignSide(wristX: wristX) else { return nil }
-            return Self.makeFrame(side: side, points: pts, timestamp: t)
+            let frame = Self.makeFrame(side: side, points: pts, timestamp: t, previous: lastPoints[side])
+            lastPoints[side] = frame.points
+            return frame
         }
         DebugProbe.shared.noteDetection(obs: observations.count, hands: frames.count, err: "none")
         return frames
@@ -66,16 +71,22 @@ public final class VisionHandTracker: HandTracker {
     /// Pure + fixture-testable: mirror X + flip Y for selfie top-down view
     /// (Vision normalized coords are bottom-left origin — raw y would draw the
     /// skeleton vertically flipped and invert the volume band), gate
-    /// confidence, bridge weak/missing points to the previous good landmark.
-    static func makeFrame(side: HandSide, points: [Int: (x: Double, y: Double, c: Double)], timestamp: Double) -> HandFrame {
+    /// confidence, hold the previous-frame position when a joint drops out.
+    static func makeFrame(
+        side: HandSide,
+        points: [Int: (x: Double, y: Double, c: Double)],
+        timestamp: Double,
+        previous: [LandmarkPoint]? = nil
+    ) -> HandFrame {
         var out: [LandmarkPoint] = []
         out.reserveCapacity(HandFrame.landmarkCount)
         for i in 0..<HandFrame.landmarkCount {
             if let p = points[i], p.c >= 0.5 {
                 out.append(LandmarkPoint(x: 1 - p.x, y: 1 - p.y, confidence: p.c))
+            } else if let prev = previous, i < prev.count {
+                out.append(LandmarkPoint(x: prev[i].x, y: prev[i].y, confidence: 0))
             } else {
-                let fallback = out.last ?? LandmarkPoint(x: 0.5, y: 0.5, confidence: 0)
-                out.append(LandmarkPoint(x: fallback.x, y: fallback.y, confidence: 0))
+                out.append(LandmarkPoint(x: 0.5, y: 0.5, confidence: 0))
             }
         }
         return HandFrame(side: side, points: out, timestamp: timestamp)

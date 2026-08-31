@@ -197,7 +197,26 @@ struct SettingsSheet: View {
                         get: { controller.settings.padCount },
                         set: { controller.settings.padCount = $0; controller.applySettings() }
                     ), in: 4...16)
-                    Text("Floating pads appear over the camera showing where to place your fingers. Hover over a pad, then curl your finger to press it. Each pad shows its note name.")
+                    HStack {
+                        Text("BPM")
+                        Slider(value: Binding(
+                            get: { controller.settings.bpm },
+                            set: { controller.settings.bpm = $0; controller.applySettings() }
+                        ), in: 40...240, step: 1)
+                        Text("\(Int(controller.settings.bpm.rounded()))")
+                            .font(.system(size: 11, design: .monospaced))
+                            .frame(width: 36)
+                    }
+                    Picker("Ignore shorter than", selection: Binding(
+                        get: { controller.settings.minNoteSubdivisionRaw },
+                        set: { controller.settings.minNoteSubdivisionRaw = $0; controller.applySettings() }
+                    )) {
+                        ForEach(NoteSubdivision.allCases) { s in
+                            Text(s.displayName).tag(s.rawValue)
+                        }
+                    }
+                    Text(String(format: "Ignore shorter than %.0f ms. Hover over a pad, then curl to press.",
+                                controller.settings.minPressDuration * 1000))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

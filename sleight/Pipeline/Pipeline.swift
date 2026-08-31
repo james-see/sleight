@@ -20,6 +20,7 @@ struct OverlayState {
     var arPadHits: Set<Int> = []       // hovering (finger inside rect)
     var arPadNotes: [UInt8] = []       // note for each pad
     var arPadsPressed: Set<Int> = []   // actively pressed (curl detected)
+    var imageSize: CGSize = .zero      // capture buffer size for aspect-fill overlay
 }
 
 enum DropPolicy {
@@ -65,6 +66,16 @@ final class Pipeline {
     private var lastFps: Double = 0
     private var droppedFrames = 0
     private var justDropped = false
+    private var lastImageSize: CGSize = .zero
+    private let publishLock = NSLock()
+    private var pendingOverlay: OverlayState?
+    private var publishEnqueued = false
+    private var pendingHits: Set<Int> = []
+    private var confirmedHits: Set<Int> = []
+    private var hitStreak = 0
+    private var pendingPressed: Set<Int> = []
+    private var confirmedPressed: Set<Int> = []
+    private var pressStreak = 0
 
     // Settings reference – used for AR‑button enable/disable and note choice.
     private let settings: AppSettings
@@ -94,10 +105,14 @@ final class Pipeline {
         }
         justDropped = false
 
+        lastImageSize = CGSize(
+            width: CVPixelBufferGetWidth(pixelBuffer),
+            height: CVPixelBufferGetHeight(pixelBuffer)
+        )
         let t = Double(start.uptimeNanoseconds) / 1e9
         let dt = lastDuration == 0 ? 1.0 / 60 : lastDuration
         let hands = tracker.detect(pixelBuffer, at: t)
-        let filtered = filter(hands, dt: dt)
+        let filtered = filter(hands, dt: 1.0 / 60.0)
         let events = instrument.update(hands: filtered, dt: dt)
 
         if !practiceMode {
@@ -118,15 +133,23 @@ final class Pipeline {
         return events
     }
 
-    /// One-Euro the primary control signals (index-tip x, wrist y) per hand;
-    /// skeleton goes to the overlay raw (jitter invisible at display rate).
+    /// One-Euro the control joints: wrist, four finger tips, four MCPs.
+    /// Filter `dt` is 1/60 so Vision spikes don't open the cutoff.
+    private static let filteredJoints = [
+        Landmark.wrist,
+        Landmark.indexTip, Landmark.indexMCP,
+        Landmark.middleTip, Landmark.middleMCP,
+        Landmark.ringTip, Landmark.ringMCP,
+        Landmark.littleTip, Landmark.littleMCP,
+    ]
+
     private func filter(_ hands: [HandFrame], dt: Double) -> [HandFrame] {
         hands.map { hand in
             var pts = hand.points
-            pts[Landmark.indexTip].x = box(hand.side, key: "pitchX").filter.filter(pts[Landmark.indexTip].x, dt: dt)
-            pts[Landmark.indexTip].y = box(hand.side, key: "pitchY").filter.filter(pts[Landmark.indexTip].y, dt: dt)
-            pts[Landmark.wrist].x = box(hand.side, key: "volumeX").filter.filter(pts[Landmark.wrist].x, dt: dt)
-            pts[Landmark.wrist].y = box(hand.side, key: "volumeY").filter.filter(pts[Landmark.wrist].y, dt: dt)
+            for idx in Self.filteredJoints where idx < pts.count {
+                pts[idx].x = box(hand.side, key: "j\(idx)x").filter.filter(pts[idx].x, dt: dt)
+                pts[idx].y = box(hand.side, key: "j\(idx)y").filter.filter(pts[idx].y, dt: dt)
+            }
             return HandFrame(side: hand.side, points: pts, timestamp: hand.timestamp)
         }
     }
@@ -181,16 +204,25 @@ final class Pipeline {
             arPadNotes = []
         }
 
-        // Hit-test finger tips against pads.
-        var arPadHits: Set<Int> = []
+        // Hit-test all four finger tips against pads.
+        var rawHits: Set<Int> = []
         if !arPadLayout.isEmpty, let r = right {
-            for v in 0..<min(settings.voiceCount, Self.fingerTipsCount) {
+            for v in 0..<Self.fingerTipsCount {
                 let tipIdx = Self.fingerTipIndex(v)
                 let pt = CGPoint(x: r.points[tipIdx].x, y: r.points[tipIdx].y)
                 if let hit = ARPadLayout.hitTest(pt, pads: arPadLayout) {
-                    arPadHits.insert(hit)
+                    rawHits.insert(hit)
                 }
             }
+        }
+        let arPadHits = confirmSet(rawHits, pending: &pendingHits, confirmed: &confirmedHits, streak: &hitStreak)
+
+        var rawPressed: Set<Int> = []
+        if let pads = inst as? PolyPads, let layout = pads.padLayout {
+            rawPressed = Set(layout.indices.filter { idx in
+                pads.activePads.keys.contains(idx) ||
+                pads.fingerPadAssignment.values.contains(idx)
+            })
         }
 
         let state = OverlayState(
@@ -214,24 +246,47 @@ final class Pipeline {
             arPads: arPadLayout.isEmpty ? nil : arPadLayout,
             arPadHits: arPadHits,
             arPadNotes: arPadNotes,
-            arPadsPressed: {
-                // Determine pressed pads from the instrument's active state
-                if let pads = inst as? PolyPads, let layout = pads.padLayout {
-                    return Set(layout.indices.filter { idx in
-                        pads.activePads.keys.contains(idx) ||
-                        pads.fingerPadAssignment.values.contains(idx)
-                    })
-                }
-                return []
-            }()
+            arPadsPressed: confirmSet(rawPressed, pending: &pendingPressed, confirmed: &confirmedPressed, streak: &pressStreak),
+            imageSize: lastImageSize
         )
         if synchronous {
             MainActor.assumeIsolated {
                 model.overlay = state
             }
         } else {
-            Task { @MainActor in
-                model.overlay = state
+            enqueueOverlay(state)
+        }
+    }
+
+    /// Two matching frames before a hover/press set is published.
+    private func confirmSet(_ next: Set<Int>, pending: inout Set<Int>, confirmed: inout Set<Int>, streak: inout Int) -> Set<Int> {
+        if next == pending {
+            streak += 1
+        } else {
+            pending = next
+            streak = 1
+        }
+        if streak >= 2 {
+            confirmed = pending
+        }
+        return confirmed
+    }
+
+    private func enqueueOverlay(_ state: OverlayState) {
+        publishLock.lock()
+        pendingOverlay = state
+        let needSchedule = !publishEnqueued
+        if needSchedule { publishEnqueued = true }
+        publishLock.unlock()
+        guard needSchedule else { return }
+        Task { @MainActor [weak model] in
+            self.publishLock.lock()
+            let next = self.pendingOverlay
+            self.pendingOverlay = nil
+            self.publishEnqueued = false
+            self.publishLock.unlock()
+            if let next {
+                model?.overlay = next
             }
         }
     }

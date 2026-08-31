@@ -29,6 +29,12 @@ final class MusicTheoryTests: XCTestCase {
         XCTAssertEqual(MusicTheory.quantize(61.37, scale: .free, root: 0), 61.37)
     }
 
+    func testSubdivisionDuration() {
+        XCTAssertEqual(NoteSubdivision.duration(bpm: 120, subdivision: .thirtySecond), 0.0625, accuracy: 1e-9)
+        XCTAssertEqual(NoteSubdivision.duration(bpm: 120, subdivision: .sixteenth), 0.125, accuracy: 1e-9)
+        XCTAssertEqual(NoteSubdivision.duration(bpm: 60, subdivision: .thirtySecond), 0.125, accuracy: 1e-9)
+    }
+
     func testNoteNames() {
         XCTAssertEqual(MusicTheory.noteName(60), "C4")
         XCTAssertEqual(MusicTheory.noteName(61), "C#4")

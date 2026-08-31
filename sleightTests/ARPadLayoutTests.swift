@@ -93,6 +93,28 @@ final class ARPadLayoutTests: XCTestCase {
         XCTAssertEqual(notes[6], 71)  // B
     }
 
+    func testPerspectiveShrinksTowardTop() {
+        let raw = CGRect(x: 0.6, y: 0.1, width: 0.2, height: 0.2)
+        let styled = ARPadLayout.applyPerspective(raw)
+        XCTAssertLessThan(styled.width, raw.width)
+        XCTAssertLessThan(styled.height, raw.height)
+        XCTAssertEqual(styled.midX, raw.midX, accuracy: 1e-9)
+        XCTAssertEqual(styled.midY, raw.midY, accuracy: 1e-9)
+    }
+
+    func testComputeAppliesPerspective() {
+        let computed = ARPadLayout.compute(padCount: 1)
+        XCTAssertEqual(computed.count, 1)
+        let expected = ARPadLayout.applyPerspective(CGRect(
+            x: ARPadLayout.bandX.lowerBound,
+            y: ARPadLayout.bandY.lowerBound,
+            width: ARPadLayout.bandX.upperBound - ARPadLayout.bandX.lowerBound,
+            height: ARPadLayout.bandY.upperBound - ARPadLayout.bandY.lowerBound
+        ))
+        XCTAssertEqual(computed[0].midX, expected.midX, accuracy: 1e-6)
+        XCTAssertEqual(computed[0].midY, expected.midY, accuracy: 1e-6)
+    }
+
     func testPadNotesMinor() {
         let notes = ARPadLayout.padNotes(padCount: 7, scale: .minor, root: 60, octaves: 2)
         XCTAssertEqual(notes.count, 7)

@@ -29,6 +29,8 @@ final class AppSettings: ObservableObject {
     @Published var arPadsEnabled: Bool
     @Published var autoMuteWhenHostConnected: Bool
     @Published var padCount: Int
+    @Published var bpm: Double
+    @Published var minNoteSubdivisionRaw: String
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -56,6 +58,8 @@ final class AppSettings: ObservableObject {
         arPadsEnabled = d.object(forKey: "arPadsEnabled") as? Bool ?? true
         autoMuteWhenHostConnected = d.object(forKey: "autoMuteWhenHostConnected") as? Bool ?? true
         padCount = d.object(forKey: "padCount") as? Int ?? 12
+        bpm = d.object(forKey: "bpm") as? Double ?? 120
+        minNoteSubdivisionRaw = d.string(forKey: "minNoteSubdivision") ?? NoteSubdivision.thirtySecond.rawValue
         $scaleRaw.sink { d.set($0, forKey: "scale") }.store(in: &cancellables)
         $root.sink { d.set($0, forKey: "root") }.store(in: &cancellables)
         $octaves.sink { d.set($0, forKey: "octaves") }.store(in: &cancellables)
@@ -77,6 +81,8 @@ final class AppSettings: ObservableObject {
         $arPadsEnabled.sink { d.set($0, forKey: "arPadsEnabled") }.store(in: &cancellables)
         $autoMuteWhenHostConnected.sink { d.set($0, forKey: "autoMuteWhenHostConnected") }.store(in: &cancellables)
         $padCount.sink { d.set($0, forKey: "padCount") }.store(in: &cancellables)
+        $bpm.sink { d.set($0, forKey: "bpm") }.store(in: &cancellables)
+        $minNoteSubdivisionRaw.sink { d.set($0, forKey: "minNoteSubdivision") }.store(in: &cancellables)
 
     }
 
@@ -84,4 +90,10 @@ final class AppSettings: ObservableObject {
     var midiMode: MIDIMode { MIDIMode(rawValue: midiModeRaw) ?? .ump }
     var glide: GlideMode { GlideMode(rawValue: glideRaw) ?? .glide }
     var instrumentType: InstrumentType { InstrumentType(rawValue: instrumentRaw) ?? .theremin }
+    var minNoteSubdivision: NoteSubdivision {
+        NoteSubdivision(rawValue: minNoteSubdivisionRaw) ?? .thirtySecond
+    }
+    var minPressDuration: Double {
+        NoteSubdivision.duration(bpm: bpm, subdivision: minNoteSubdivision)
+    }
 }

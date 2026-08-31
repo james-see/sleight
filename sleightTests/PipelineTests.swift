@@ -124,6 +124,7 @@ final class PipelineTests: XCTestCase {
         pts[8] = LandmarkPoint(x: tipX, y: tipY, confidence: 1.0) // index tip in pad 0
         let frame = HandFrame(side: .right, points: pts, timestamp: 0)
         _ = p.processSynthetic([frame], dt: 1/60)
+        _ = p.processSynthetic([frame], dt: 1/60)
 
         XCTAssertTrue(model.overlay.arPadHits.contains(0),
             "pad 0 should be hit when index finger is inside it")

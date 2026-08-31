@@ -35,8 +35,12 @@ public struct HandFrame: Equatable {
 public enum Landmark {
     public static let wrist = 0
     public static let thumbTip = 4
-    public static let indexTip = 8
     public static let indexMCP = 5
+    public static let indexTip = 8
     public static let middleMCP = 9
     public static let middleTip = 12
+    public static let ringMCP = 13
+    public static let ringTip = 16
+    public static let littleMCP = 17
+    public static let littleTip = 20
 }

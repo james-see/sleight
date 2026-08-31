@@ -67,11 +67,19 @@ That's the same band as a MIDI keyboard through a software instrument.
 
 ## Building from source
 
+Requires **full Xcode** (not just Command Line Tools) and Apple Silicon.
+
 ```bash
 brew install xcodegen
 git clone https://github.com/james-see/sleight && cd sleight
 xcodegen
 open sleight.xcodeproj   # ⌘R
+```
+
+If `xcodebuild` says the active developer directory is Command Line Tools:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ```
 
 ## How it works
@@ -87,18 +95,22 @@ instrument), drops work when tracking falls behind, and every MIDI event is
 timestamped from the camera frame's host time. Hands leaving the frame always
 fire a note-off — no stuck notes, ever.
 
-## AR Pad Overlay (v2.2)
+## AR Pad Overlay (v2.4)
 
 When **AR Pads** is enabled (default for Poly Pads), floating semi-transparent
 pads appear over the camera preview showing you exactly where to land your
-fingers. Each pad maps to a note in your chosen scale — your finger snaps to
-the pad's pitch when it's inside the pad rect, and plays continuously when
-between pads. Pads highlight blue when hit.
+fingers. Overlay coordinates share the preview's aspect-fill crop so pads and
+skeleton sit on the hands. Hover over a pad, then curl a finger to press it.
+Each pad shows its note name and highlights when hovered or pressed.
 
 The pads use perspective styling (slight shrink with vertical position) to
 suggest depth, but tracking is 2D via Vision's normalized hand landmarks — no
-ARKit or 3D framework required. Pad layout auto-adjusts to your voice count
-(2–4 pads in a grid).
+ARKit or 3D framework required. Pad layout auto-adjusts to your pad count
+(4–16 in a grid).
+
+**Ghost-note filter:** a press that is held shorter than a 16th or 32nd (Settings →
+BPM + subdivision, default 120 BPM / 32nd ≈ 63 ms) never emits MIDI. One-frame
+Vision flickers are ignored on both attack and release.
 
 ## Audio Delegation (v2.2)
 
@@ -122,6 +134,7 @@ Practice mode is on.
 - v2.1 ✅: per-finger polyphony (2–4 simultaneous MPE notes via Poly Pads)
 - v2.2 ✅: floating AR pad overlays + auto-mute synth when DAW connected
 - v2.3 ✅: 12 AR pads with note labels + finger-curl press gate + minor scale
+- v2.4 ✅: aspect-fill overlay alignment, stable pad highlights, tempo-relative ghost-note filter
 - v3: ESP32 wireless-glove mode (IMU-fused tracking for away-from-desk play), AUv3 plugin, ribbon instrument
 
 ## License

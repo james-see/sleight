@@ -14,6 +14,8 @@ final class PolyPadsARTests: XCTestCase {
         pads.padNotes = ARPadLayout.padNotes(padCount: 12, scale: .minorPentatonic, root: 60, octaves: 2)
         pads.pressThreshold = 0.30
         pads.releaseThreshold = 0.38
+        pads.minPressDuration = 0
+        pads.releaseDebounceFrames = 1
     }
 
     /// Build a right hand with a specific finger's tip at (x, y) and a given
@@ -160,6 +162,49 @@ final class PolyPadsARTests: XCTestCase {
         XCTAssertEqual(noteOns.count, 2, "two curled fingers in two pads should play two notes")
     }
 
+    // MARK: Ghost-note / misfire gate
+
+    func testOneFrameCurlIsSuppressed() {
+        pads.minPressDuration = 0.0625
+        pads.releaseDebounceFrames = 2
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let press = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
+        let evs1 = pads.update(hands: [press], dt: 0.016)
+        XCTAssertTrue(evs1.filter({ if case .noteOn = $0.kind { return true } else { return false } }).isEmpty)
+        let release = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.50)
+        let evs2 = pads.update(hands: [release], dt: 0.016)
+        XCTAssertTrue(evs2.filter({ if case .noteOn = $0.kind { return true } else { return false } }).isEmpty)
+        XCTAssertTrue(evs2.filter({ if case .noteOff = $0.kind { return true } else { return false } }).isEmpty)
+    }
+
+    func testHoldForMinDurationFiresOneNote() {
+        pads.minPressDuration = 0.0625
+        pads.releaseDebounceFrames = 2
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let press = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
+        var ons = 0
+        for _ in 0..<6 {
+            let evs = pads.update(hands: [press], dt: 0.016)
+            ons += evs.filter { if case .noteOn = $0.kind { return true } else { return false } }.count
+        }
+        XCTAssertEqual(ons, 1, "held past 32nd should fire exactly one note-on")
+    }
+
+    func testOneFrameExtendDoesNotRelease() {
+        pads.minPressDuration = 0
+        pads.releaseDebounceFrames = 2
+        guard let pad0 = pads.padLayout?.first else { XCTFail("no layout"); return }
+        let press = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.15)
+        _ = pads.update(hands: [press], dt: 0.016)
+        let flick = rightHand(finger: 8, tipX: Double(pad0.midX), tipY: Double(pad0.midY), extensionRatio: 0.50)
+        let evs = pads.update(hands: [flick], dt: 0.016)
+        XCTAssertTrue(evs.filter({ if case .noteOff = $0.kind { return true } else { return false } }).isEmpty,
+                      "single-frame extend should not note-off")
+        let evs2 = pads.update(hands: [flick], dt: 0.016)
+        XCTAssertFalse(evs2.filter({ if case .noteOff = $0.kind { return true } else { return false } }).isEmpty,
+                       "second release frame should note-off")
+    }
+
     // MARK: Legacy extension mode (no pads)
 
     func testPadLayoutNilUsesExtensionMode() {
@@ -222,5 +267,23 @@ final class PolyPadsARTests: XCTestCase {
         }
         XCTAssertEqual(polyPads.padLayout?.count, 8)
         XCTAssertEqual(polyPads.padNotes?.count, 8)
+    }
+
+    @MainActor
+    func testGhostNoteDefaultsAndWiring() {
+        let settings = AppSettings()
+        settings.bpm = 120
+        settings.minNoteSubdivisionRaw = NoteSubdivision.thirtySecond.rawValue
+        XCTAssertEqual(settings.minPressDuration, 0.0625, accuracy: 1e-9)
+
+        let controller = SleightController()
+        controller.settings.instrumentRaw = InstrumentType.polyPads.rawValue
+        controller.settings.bpm = 60
+        controller.settings.minNoteSubdivisionRaw = NoteSubdivision.sixteenth.rawValue
+        controller.applySettings()
+        guard let polyPads = controller.pipeline.instrument as? PolyPads else {
+            XCTFail("expected PolyPads"); return
+        }
+        XCTAssertEqual(polyPads.minPressDuration, 0.25, accuracy: 1e-9)
     }
 }

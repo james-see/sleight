@@ -62,6 +62,7 @@ final class SleightController: ObservableObject {
         if let pads = inst as? PolyPads {
             pads.voiceCount = settings.voiceCount
             pads.padCount = settings.padCount
+            pads.minPressDuration = settings.minPressDuration
             if settings.arPadsEnabled {
                 let layout = ARPadLayout.compute(padCount: settings.padCount)
                 let notes = ARPadLayout.padNotes(

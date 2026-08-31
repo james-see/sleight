@@ -32,9 +32,19 @@ struct ARPadLayout {
             let rowFromTop = (rows - 1) - rowFromBottom
             let x = bandX.lowerBound + CGFloat(col) * (padW + padMargin)
             let y = bandY.lowerBound + CGFloat(rowFromTop) * (padH + padMargin)
-            rects.append(CGRect(x: x, y: y, width: padW, height: padH))
+            rects.append(applyPerspective(CGRect(x: x, y: y, width: padW, height: padH)))
         }
         return rects
+    }
+
+    /// Pads lower on screen (higher Y) appear closer — shrink toward the top
+    /// so draw + hit-test share the same rects.
+    static func applyPerspective(_ rect: CGRect) -> CGRect {
+        let shrinkY = 0.88 + 0.12 * (1 - rect.midY)
+        let shrinkX = 0.92 + 0.08 * (1 - rect.midY)
+        let w = rect.width * shrinkX
+        let h = rect.height * shrinkY
+        return CGRect(x: rect.midX - w / 2, y: rect.midY - h / 2, width: w, height: h)
     }
 
     /// Compute the MIDI note number for each pad given scale, root, and octave.

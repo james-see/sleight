@@ -16,9 +16,17 @@ final class HandTrackerTests: XCTestCase {
         XCTAssertEqual(frame.points[0].y, 0.5, accuracy: 1e-9)
     }
 
-    func testLowConfidencePointInheritsNeighborPosition() {
+    func testLowConfidencePointFallsBackToCenterWithoutHistory() {
         let frame = VisionHandTracker.makeFrame(side: .right, points: fixture(), timestamp: 1.0)
-        XCTAssertEqual(frame.points[7].x, frame.points[6].x, accuracy: 1e-9)
+        XCTAssertEqual(frame.points[7].x, 0.5, accuracy: 1e-9)
+        XCTAssertEqual(frame.points[7].confidence, 0.0)
+    }
+
+    func testLowConfidencePointHoldsPreviousFrame() {
+        let prev = (0..<21).map { i in LandmarkPoint(x: Double(i) * 0.01, y: 0.3, confidence: 1) }
+        let frame = VisionHandTracker.makeFrame(side: .right, points: fixture(), timestamp: 1.0, previous: prev)
+        XCTAssertEqual(frame.points[7].x, 0.07, accuracy: 1e-9)
+        XCTAssertEqual(frame.points[7].y, 0.3, accuracy: 1e-9)
         XCTAssertEqual(frame.points[7].confidence, 0.0)
     }
 

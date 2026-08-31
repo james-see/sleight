@@ -16,6 +16,33 @@ public enum Scale: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+public enum NoteSubdivision: String, CaseIterable, Identifiable {
+    case sixteenth
+    case thirtySecond
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .sixteenth: return "16th"
+        case .thirtySecond: return "32nd"
+        }
+    }
+
+    /// Subdivisions per quarter-note beat.
+    public var perBeat: Double {
+        switch self {
+        case .sixteenth: return 4
+        case .thirtySecond: return 8
+        }
+    }
+
+    /// Duration in seconds of one subdivision at `bpm`.
+    public static func duration(bpm: Double, subdivision: NoteSubdivision) -> Double {
+        60.0 / max(bpm, 1) / subdivision.perBeat
+    }
+}
+
 public enum MusicTheory {
     /// Snap continuous pitch (semitones) to nearest tone of scale rooted at `root`
     /// (root given as pitch class 0-11). `.free` returns input untouched;
